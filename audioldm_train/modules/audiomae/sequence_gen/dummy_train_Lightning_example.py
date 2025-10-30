@@ -405,7 +405,7 @@ val_loader   = DataLoader(val_dataset,   batch_size=batch_size, shuffle=False, n
 # CLAP (frozen, eval)
 # ============================
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-pretrained_path = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning\data\checkpoints\clap_htsat_tiny.pt".replace("\\", "/")
+pretrained_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/Checkpoint_AudioLDM2/clap_htsat_tiny.pt".replace("\\", "/")
 
 model_clap = CLAPAudioEmbeddingClassifierFreev2(
     pretrained_path=pretrained_path,
