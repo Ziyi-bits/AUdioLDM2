@@ -24,6 +24,19 @@ from transformers import get_cosine_schedule_with_warmup
 # print(ckpt['optimizer_states'][0].keys())
 # print(ckpt['lr_schedulers'][0]['_last_lr'])
 # ============================
+class DummyAudioDataset(Dataset):
+    def __init__(self, num_samples=40):
+        self.num_samples = num_samples
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        return {
+            "text": "Dummy text data",
+            "crossattn_audiomae_pooled": (torch.randn(8, 768), torch.ones(8))  # target (S_tgt, H), mask (S_tgt,)
+            # "crossattn_audiomae_mask": (torch.ones(8))  # target (S_tgt, H), mask (S_tgt,)
+        }
+
 class TestAudioDataset(Dataset):
     # initialize with your test data
 
@@ -392,7 +405,8 @@ class LitCLAPToGPT2(pl.LightningModule):
 # Build datasets & dataloaders
 # ============================
 data_path = r"C:\Users\ZiXu\Documents\Python_Scripts\mae_output".replace("\\", "/")
-full_dataset = TestAudioDataset(data_path=data_path)
+# full_dataset = TestAudioDataset(data_path=data_path)
+full_dataset = DummyAudioDataset(num_samples=40)
 
 val_ratio = 0.2
 val_size = int(len(full_dataset) * val_ratio)
