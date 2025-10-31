@@ -460,6 +460,12 @@ max_epochs = 30
 total_steps = max_epochs * len(train_loader)
 warmup_steps = int(0.1 * total_steps)
 
+# print training, validation data size
+print(f"Training samples: {len(train_dataset)}, Validation samples: {len(val_dataset)}")
+# print total steps and warmup steps
+print(f"Total training steps: {total_steps}, Warmup steps: {warmup_steps}")
+
+
 lit_model = LitCLAPToGPT2(
     clap_model=model_clap,
     sequence_input_key=["Clap_text_encoder"],
