@@ -404,16 +404,12 @@ class LitCLAPToGPT2(pl.LightningModule):
 # ============================
 # Build datasets & dataloaders
 # ============================
-data_path = r"C:\Users\ZiXu\Documents\Python_Scripts\mae_output".replace("\\", "/")
-# full_dataset = TestAudioDataset(data_path=data_path)
-full_dataset = DummyAudioDataset(num_samples=40)
+train_ata_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/AudioMAE_embeddings_final_1_unzipped/audiomae_embeddings_final_1/train/"
+val_data_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/AudioMAE_embeddings_final_1_unzipped/audiomae_embeddings_final_1/val/"
+train_dataset = TestAudioDataset(data_path=train_ata_path)
+val_dataset = TestAudioDataset(data_path=val_data_path)
 
-val_ratio = 0.2
-val_size = int(len(full_dataset) * val_ratio)
-train_size = len(full_dataset) - val_size
-train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
-
-batch_size = 2
+batch_size = 32
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 val_loader   = DataLoader(val_dataset,   batch_size=batch_size, shuffle=False, num_workers=0)
 
@@ -513,8 +509,6 @@ trainer = pl.Trainer(
     precision="16-mixed" if torch.cuda.is_available() else "32-true",
     log_every_n_steps=4,
     callbacks=[checkpoint_cb, early_stop_cb],
-    logger=csv_logger,  # <-- CSV logger only
-    default_root_dir=OUTPUT_DIR  # <-- Trainer root for other artifacts
 )
 
 # ============================
