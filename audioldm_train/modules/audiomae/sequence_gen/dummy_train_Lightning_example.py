@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
 import sys
 import numpy as np
 from datetime import datetime
-sys.path.append(r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning")
+sys.path.append(r"/Workspace/Users/ziyi.xu@harman.com/AUdioLDM2")
 from audioldm_train.conditional_models import CLAPAudioEmbeddingClassifierFreev2
 from transformers import get_cosine_schedule_with_warmup
 
