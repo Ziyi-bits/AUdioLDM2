@@ -3,6 +3,7 @@
 # ============================
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.loggers import CSVLogger  # <-- added (CSV only)
 import os
 import torch
 import torch.nn as nn
@@ -12,6 +13,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
 import sys
 import numpy as np
+from datetime import datetime
 sys.path.append(r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning")
 from audioldm_train.conditional_models import CLAPAudioEmbeddingClassifierFreev2
 from transformers import get_cosine_schedule_with_warmup
@@ -418,6 +420,30 @@ model_clap.eval()  # deterministic inference
 
 
 # ============================
+# Paths / Experiment naming (CSV logs + checkpoints + outputs)
+# ============================
+LOG_DIR = r"/Volumes/gen_audio_catalog/volumes/ziyi/GPT2_training/logs".replace("\\", "/")
+CKPT_DIR = r"/Volumes/gen_audio_catalog/volumes/ziyi/GPT2_training/checkpoints".replace("\\", "/")
+OUTPUT_DIR = r"/Volumes/gen_audio_catalog/volumes/ziyi/GPT2_training/outputs".replace("\\", "/")
+
+EXP_NAME = "clap2gpt2"
+# Timestamped run for uniqueness; you can set a fixed string if preferred.
+RUN_VERSION = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# Ensure directories exist
+os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(CKPT_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# CSV Logger (only)
+csv_logger = CSVLogger(
+    save_dir=LOG_DIR,
+    name=f"{EXP_NAME}_csv",   # folder name under LOG_DIR
+    version=RUN_VERSION
+)
+
+
+# ============================
 # Lightning module
 # ============================
 max_epochs = 30
@@ -448,8 +474,8 @@ lit_model = LitCLAPToGPT2(
 # Callbacks: checkpoint + early stop
 # ============================
 checkpoint_cb = ModelCheckpoint(
-    dirpath=".",
-    filename="best_model",
+    dirpath=os.path.join(CKPT_DIR, EXP_NAME, RUN_VERSION),  # <-- checkpoints path,
+    filename="GPT2_{epoch}_{val_loss:.4f}",
     save_top_k=1,
     verbose=True,
     monitor="val/loss",
@@ -473,6 +499,8 @@ trainer = pl.Trainer(
     precision="16-mixed" if torch.cuda.is_available() else "32-true",
     log_every_n_steps=4,
     callbacks=[checkpoint_cb, early_stop_cb],
+    logger=csv_logger,  # <-- CSV logger only
+    default_root_dir=OUTPUT_DIR  # <-- Trainer root for other artifacts
 )
 
 # ============================
