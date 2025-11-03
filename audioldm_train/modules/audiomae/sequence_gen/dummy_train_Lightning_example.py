@@ -349,7 +349,7 @@ class LitCLAPToGPT2(pl.LightningModule):
         output = self(cond_dict, target_embeds, target_mask)
         val_loss = self.loss_fn(output, target_embeds)
 
-        self.log("val/loss", val_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True)
+        self.log("val_loss", val_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True)
         return val_loss
 
     # --------- Optim / Schedulers ----------
@@ -390,7 +390,7 @@ class LitCLAPToGPT2(pl.LightningModule):
                 "scheduler": scheduler,
                 "interval": step_type,   # step the scheduler every epoch. If using HF_CosineWithWarmup, use "step"!!!!!!
                 "frequency": 1,
-                "monitor": "val/loss"  # used by EarlyStopping/ModelCheckpoint if configured
+                "monitor": "val_loss"  # used by EarlyStopping/ModelCheckpoint if configured
             },
         }
 
@@ -404,14 +404,17 @@ class LitCLAPToGPT2(pl.LightningModule):
 # ============================
 # Build datasets & dataloaders
 # ============================
-train_ata_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/AudioMAE_embeddings_final_1_unzipped/audiomae_embeddings_final_1/train/"
-val_data_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/AudioMAE_embeddings_final_1_unzipped/audiomae_embeddings_final_1/val/"
+train_ata_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/AudioMAE_emb_GPT2_training/train/"
+val_data_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/AudioMAE_emb_GPT2_training/val/"
 train_dataset = TestAudioDataset(data_path=train_ata_path)
 val_dataset = TestAudioDataset(data_path=val_data_path)
 
-batch_size = 32
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-val_loader   = DataLoader(val_dataset,   batch_size=batch_size, shuffle=False, num_workers=0)
+num_workers = os.cpu_count() -2  # or multiprocessing.cpu_count()
+print(f"Number of CPUs: {num_workers}")
+
+batch_size = 24
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, prefetch_factor=4, pin_memory=True)
+val_loader   = DataLoader(val_dataset,   batch_size=batch_size, shuffle=False, num_workers=num_workers, prefetch_factor=4, pin_memory=True)
 
 # ============================
 # CLAP (frozen, eval)
@@ -460,6 +463,8 @@ max_epochs = 30
 total_steps = max_epochs * len(train_loader)
 warmup_steps = int(0.1 * total_steps)
 
+log_every_n_steps = np.floor(len(train_dataset)/(10*batch_size))
+
 # print training, validation data size
 print(f"Training samples: {len(train_dataset)}, Validation samples: {len(val_dataset)}")
 # print total steps and warmup steps
@@ -482,7 +487,7 @@ lit_model = LitCLAPToGPT2(
     gamma=0.8,
     T_max=None,     # default to max_epochs
     eta_min=1e-6,
-    log_every_n_steps=4,
+    log_every_n_steps=log_every_n_steps,
     num_training_steps=total_steps
 )
 
@@ -494,12 +499,12 @@ checkpoint_cb = ModelCheckpoint(
     filename="GPT2_{epoch}_{val_loss:.4f}",
     save_top_k=1,
     verbose=True,
-    monitor="val/loss",
+    monitor="val_loss",
     mode="min",
 )
 
 early_stop_cb = EarlyStopping(
-    monitor="val/loss",
+    monitor="val_loss",
     mode="min",
     patience=5,  # P
     verbose=True,
@@ -513,7 +518,7 @@ trainer = pl.Trainer(
     accelerator="auto",
     devices="auto",
     precision="16-mixed" if torch.cuda.is_available() else "32-true",
-    log_every_n_steps=4,
+    log_every_n_steps=log_every_n_steps,
     callbacks=[checkpoint_cb, early_stop_cb],
 )
 
