@@ -279,7 +279,7 @@ def get_vocoder(config, device, mel_bins):
         config = hifigan.AttrDict(config)
         vocoder = hifigan.Generator_HiFiRes(config)
 
-    ckpt = torch.load(model_path + ".ckpt")
+    ckpt = torch.load(model_path + ".ckpt", map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     ckpt = torch_version_orig_mod_remove(ckpt)
     vocoder.load_state_dict(ckpt["generator"])
     vocoder.eval()
