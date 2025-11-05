@@ -246,7 +246,7 @@ class LitCLAPToGPT2(pl.LightningModule):
         lora_alpha=16,
         lora_dropout=0.05,
         lora_target_modules=("c_attn", "c_fc", "c_proj"),
-        lora_save_dir="gpt2_lora_adapter",
+        lora_save_dir="./gpt2_lora_adapter",
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["clap_model"])
@@ -423,7 +423,7 @@ model_clap.eval()
 # ============================
 # Lightning module
 # ============================
-max_epochs = 30
+max_epochs = 2
 total_steps = max_epochs * len(train_loader)
 warmup_steps = int(0.1 * total_steps)
 
