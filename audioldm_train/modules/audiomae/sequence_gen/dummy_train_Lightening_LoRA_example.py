@@ -1,0 +1,556 @@
+# ============================
+# Lightning implementation
+# ============================
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.loggers import CSVLogger  # <-- added (CSV only)
+import os
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, Dataset, random_split
+from transformers import GPT2Model
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
+import sys
+import numpy as np
+from datetime import datetime
+sys.path.append(r"/Workspace/Users/ziyi.xu@harman.com/AUdioLDM2")
+from audioldm_train.conditional_models import CLAPAudioEmbeddingClassifierFreev2
+from transformers import get_cosine_schedule_with_warmup
+# ==== NEW/CHANGED ====
+from peft import LoraConfig, get_peft_model, TaskType
+
+class DummyAudioDataset(Dataset):
+    def __init__(self, num_samples=40):
+        self.num_samples = num_samples
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        return {
+            "text": "Dummy text data",
+            "crossattn_audiomae_pooled": (torch.randn(8, 768), torch.ones(8))  # target (S_tgt, H), mask (S_tgt,)
+            # "crossattn_audiomae_mask": (torch.ones(8))  # target (S_tgt, H), mask (S_tgt,)
+        }
+
+class TestAudioDataset(Dataset):
+    # initialize with your test data
+
+    @staticmethod
+    def get_list_of_files(directory, extension):
+        """Return sorted list of files with given extension."""
+        return sorted([f for f in os.listdir(directory) if f.endswith(extension)])
+
+    def __init__(self,
+                 num_samples=10,
+                 data_path="path/to/your/test/data",
+                 text_file_extension=".txt",
+                 embed_file_extension=".npy",
+                 text_file_path="path/to/your/test/texts",
+                 embed_file_path="path/to/your/test/embeddings",
+                 attention_file_path="path/to/your/test/attention_masks"):
+        self.data_path = data_path
+        self.text_file_extension = text_file_extension
+        self.embed_file_extension = embed_file_extension
+        self.text_file_path = text_file_path
+        self.embed_file_path = embed_file_path
+        self.attention_file_path = attention_file_path
+        self.text_file_path = os.path.join(data_path, 'texts')
+        self.embed_file_path = os.path.join(data_path, 'mae_embeds')
+        self.attention_file_path = os.path.join(data_path, 'mae_attn_mask')
+
+        # check number of .txt files in data_path
+        num_txt_files = len([f for f in os.listdir(self.text_file_path) if f.endswith('.txt')])
+        # check number of .npy files in embed_file_path
+        num_npy_files = len([f for f in os.listdir(self.embed_file_path) if f.endswith('.npy')])
+        # check number of .npy files in attention_file_path
+        num_attn_files = len([f for f in os.listdir(self.attention_file_path) if f.endswith('.npy')])
+        assert num_txt_files == num_npy_files == num_attn_files, "Mismatch in number of text, embedding, or attention mask files"
+        self.num_samples = num_txt_files
+        print("Dataset initialize finished")
+
+        self.text_files = self.get_list_of_files(self.text_file_path, self.text_file_extension)
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        # Load text
+        text_file = self.text_files[idx]
+        with open(os.path.join(self.text_file_path, text_file), 'r') as f:
+            text_data = f.read().strip()
+        file_id = os.path.splitext(text_file)[0]
+        # Load embedding
+        embed_file = file_id + self.embed_file_extension
+        #read numpy array
+        numpy_struct = np.load(os.path.join(self.embed_file_path, embed_file))
+        embed_data = torch.from_numpy(numpy_struct).float()  # [S_tgt, H]
+        # Load attention mask
+        attention_file = file_id + self.embed_file_extension
+        attention_struct = np.load(os.path.join(self.attention_file_path, attention_file))
+        attention_mask = torch.from_numpy(attention_struct).long()  # [S_tgt]
+
+        return {
+            "text": text_data,
+            "crossattn_audiomae_pooled": (embed_data, attention_mask)  # target (S_tgt, H), mask (S_tgt,)
+        }
+
+# ---------------------------
+# GPT2 wrapper
+# ---------------------------
+class GPT2SequenceModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = GPT2Model.from_pretrained("gpt2")  # hidden_size = 768
+    def forward(self, inputs_embeds, attention_mask):
+        # inputs_embeds: (B, S, H), attention_mask: (B, S)
+        return self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)["last_hidden_state"]
+
+
+# ---------------------------
+# CLAP-to-GPT2 adapter logic and GPT-2 backbone into one trainable model
+# ---------------------------
+class CLAPToGPT2(nn.Module):
+    """
+    Combines CLAP-to-GPT2 adapter logic and GPT-2 backbone into one trainable model.
+    Handles:
+      - Projection of conditioning sequences to GPT-2 hidden size
+      - Adding SOS/EOS tokens
+      - Building attention masks
+      - Truncating to GPT-2 context length
+      - Forward pass through GPT-2
+      - Returning outputs aligned for next-token prediction
+    """
+
+    def __init__(self,
+                 sequence_input_key,
+                 sequence_input_embed_dim,
+                 target_embed_dim=768,
+                 max_seq_len=1024,
+                 mae_token_num=0,
+                 target_tokens_mask_ratio=0.0,
+                 gpt2_name="gpt2",
+                 # ==== NEW/CHANGED ==== LoRA knobs
+                 use_lora=True,
+                 lora_r=8,
+                 lora_alpha=16,
+                 lora_dropout=0.05,
+                 lora_target_modules=("c_attn", "c_fc", "c_proj"),
+                 ):
+        super().__init__()
+        assert len(sequence_input_key) == len(sequence_input_embed_dim), \
+            "Keys and dims must match in length"
+
+        self.sequence_input_key = sequence_input_key
+        self.sequence_input_embed_dim = sequence_input_embed_dim
+        self.target_tokens_mask_ratio = target_tokens_mask_ratio
+        self.target_embed_dim = target_embed_dim
+        self.max_seq_len = max_seq_len
+        self.mae_token_num = mae_token_num
+
+        # Learned SOS/EOS embeddings (up to 32 sequence types)
+        self.start_of_sequence_tokens = nn.Embedding(32, target_embed_dim)
+        self.end_of_sequence_tokens = nn.Embedding(32, target_embed_dim)
+
+        # Linear projections for each input type
+        self.input_sequence_embed_linear = nn.ModuleList([
+            nn.Linear(dim, target_embed_dim) for dim in sequence_input_embed_dim
+        ])
+
+        # GPT-2 backbone
+        base_gpt2 = GPT2Model.from_pretrained(gpt2_name)
+        base_gpt2.config.use_cache = False  # more stable training
+
+        # ==== NEW/CHANGED ==== Wrap GPT-2 with LoRA
+        if use_lora:
+            lora_cfg = LoraConfig(
+                r=int(lora_r),
+                lora_alpha=int(lora_alpha),
+                lora_dropout=float(lora_dropout),
+                bias="none",
+                task_type=TaskType.FEATURE_EXTRACTION,  # we don't have an LM head here
+                target_modules=list(lora_target_modules),
+                inference_mode=False,
+            )
+            self.gpt2 = get_peft_model(base_gpt2, lora_cfg)
+            try:
+                self.gpt2.print_trainable_parameters()
+            except Exception:
+                pass
+        else:
+            self.gpt2 = base_gpt2
+
+        # Report trainables
+        trainable_params = sum(p.numel() for p in self.gpt2.parameters() if p.requires_grad)
+        if use_lora:
+            print(f"Trainable parameters in GPT-2 LoRA adapter: {trainable_params:,}")
+        else:
+            print(f"Trainable parameters in GPT-2 w/o LoRA: {trainable_params:,}")
+
+    def add_sos_eos_tokens(self, _id, sequence, attn_mask):
+        B = sequence.size(0)
+        new_attn_mask_step = torch.ones((B, 1), device=sequence.device)
+        new_attn_mask = torch.cat([new_attn_mask_step, attn_mask, new_attn_mask_step], dim=1)
+
+        key_id = torch.tensor([_id], device=sequence.device)
+        sos_token = self.start_of_sequence_tokens(key_id).expand(B, 1, -1)
+        eos_token = self.end_of_sequence_tokens(key_id).expand(B, 1, -1)
+
+        new_sequence = torch.cat([sos_token, sequence, eos_token], dim=1)
+        return new_sequence, new_attn_mask
+
+    def truncate_sequence_and_mask(self, sequence, mask, max_len=512):
+        if sequence.size(1) > max_len:
+            print(f"Truncating sequence from {sequence.size(1)} to {max_len}")
+            return sequence[:, :max_len], mask[:, :max_len]
+        return sequence, mask
+
+    def get_input_sequence_and_mask(self, cond_dict):
+        input_embeds, input_mask = None, None
+
+        for _id, key in enumerate(self.sequence_input_key):
+            assert key in cond_dict, f"Missing key {key}"
+            cond_embed = cond_dict[key]
+
+            if isinstance(cond_embed, list):
+                seq, mask = cond_embed
+            else:
+                seq = cond_embed
+                if seq.dim() == 2:  # [B, D] -> [B, 1, D]
+                    seq = seq.unsqueeze(1)
+                mask = torch.ones((seq.size(0), seq.size(1)), device=seq.device)
+
+            seq = self.input_sequence_embed_linear[_id](seq)  # project
+            seq, mask = self.add_sos_eos_tokens(_id, seq, mask)
+
+            if input_embeds is None:
+                input_embeds, input_mask = seq, mask
+            else:
+                input_embeds = torch.cat([input_embeds, seq], dim=1)
+                input_mask = torch.cat([input_mask, mask], dim=1)
+
+        max_len = int(self.max_seq_len - self.mae_token_num)
+        input_embeds, input_mask = self.truncate_sequence_and_mask(input_embeds, input_mask, max_len)
+        cond_end_idx = input_embeds.size(1)
+        return input_embeds, input_mask, cond_end_idx
+
+    def forward(self, cond_dict, target_embeds, target_mask):
+        input_embeds, input_mask, cond_end_idx = self.get_input_sequence_and_mask(cond_dict)
+
+        final_input_embeds = torch.cat([input_embeds, target_embeds], dim=1)
+        final_input_mask = torch.cat([input_mask, target_mask], dim=1)
+
+        output_embeds = self.gpt2(
+            inputs_embeds=final_input_embeds,
+            attention_mask=final_input_mask.long()
+        )["last_hidden_state"]
+
+        # Align with next-token prediction length of tgt sequence
+        output = output_embeds[:, cond_end_idx - 1: -1, :]
+        return output
+
+class LitCLAPToGPT2(pl.LightningModule):
+    def __init__(
+        self,
+        clap_model,
+        sequence_input_key,
+        sequence_input_embed_dim,
+        target_embed_dim=768,
+        max_seq_len=1024,
+        mae_token_num=0,
+        gpt2_name="gpt2",
+        # optim/schedule
+        base_lr=1e-4,
+        warmup_steps=1000,
+        scheduler_type="CosineAnnealingLR",
+        step_size=10,
+        gamma=0.8,
+        T_max=None,
+        eta_min=1e-6,
+        num_training_steps=None,
+        # logging
+        log_every_n_steps=50,
+        # ==== NEW/CHANGED ==== LoRA knobs (pass-through)
+        use_lora=True,
+        lora_r=8,
+        lora_alpha=16,
+        lora_dropout=0.05,
+        lora_target_modules=("c_attn", "c_fc", "c_proj"),
+        lora_save_dir="./gpt2_lora_adapter",
+    ):
+        super().__init__()
+        self.save_hyperparameters(ignore=["clap_model"])
+
+        # ---- CLAP (frozen, eval) ----
+        self.clap = clap_model.eval()
+        for p in self.clap.parameters():
+            p.requires_grad = False
+
+        # ---- Core model (trainable) ----
+        self.model = CLAPToGPT2(
+            sequence_input_key=sequence_input_key,
+            sequence_input_embed_dim=sequence_input_embed_dim,
+            target_embed_dim=target_embed_dim,
+            max_seq_len=max_seq_len,
+            mae_token_num=mae_token_num,
+            gpt2_name=gpt2_name,
+            # LoRA pass-through
+            use_lora=use_lora,
+            lora_r=lora_r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            lora_target_modules=lora_target_modules,
+        )
+
+        self.loss_fn = nn.L1Loss()
+        self._base_lr = float(base_lr)
+        self._warmup_steps = int(warmup_steps)
+        self._scheduler_type = scheduler_type
+        self._step_size = step_size
+        self._gamma = gamma
+        self._T_max = T_max
+        self._eta_min = eta_min
+        self._log_every_n_steps = log_every_n_steps
+        self._use_hf_warmup = (scheduler_type == "HF_CosineWithWarmup")
+        self._num_training_steps = num_training_steps
+
+        # ==== NEW/CHANGED ====
+        self._lora_save_dir = lora_save_dir
+
+    def _linear_warmup(self, optimizer):
+        if self.global_step < self._warmup_steps:
+            new_lr = self._base_lr * (float(self.global_step) / float(self._warmup_steps))
+            for pg in optimizer.param_groups:
+                pg["lr"] = new_lr
+
+    def forward(self, cond_dict, target_embeds, target_mask):
+        return self.model(cond_dict, target_embeds, target_mask)
+
+    def training_step(self, batch, batch_idx):
+        input_text = batch["text"]
+        with torch.no_grad():
+            clap_emb = self.clap(input_text).to(self.device)  # [B, 1, 512]
+
+        cond_dict = {"Clap_text_encoder": clap_emb}
+
+        target_embeds, target_mask = batch["crossattn_audiomae_pooled"]
+        target_embeds = target_embeds.to(self.device)
+        target_mask = target_mask.to(self.device).float()
+
+        output = self(cond_dict, target_embeds, target_mask)
+        loss = self.loss_fn(output, target_embeds)
+
+        optim = self.optimizers()
+        if not self._use_hf_warmup:
+            self._linear_warmup(optim)
+
+        if self.global_step % self._log_every_n_steps == 0:
+            cur_lr = optim.param_groups[0]["lr"]
+            self.log("train/lr", cur_lr, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        input_text = batch["text"]
+        with torch.no_grad():
+            clap_emb = self.clap(input_text).to(self.device)
+
+        cond_dict = {"Clap_text_encoder": clap_emb}
+
+        target_embeds, target_mask = batch["crossattn_audiomae_pooled"]
+        target_embeds = target_embeds.to(self.device)
+        target_mask = target_mask.to(self.device).float()
+
+        output = self(cond_dict, target_embeds, target_mask)
+        val_loss = self.loss_fn(output, target_embeds)
+
+        self.log("val_loss", val_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True)
+        return val_loss
+
+    def configure_optimizers(self):
+        # ==== NEW/CHANGED ==== only optimize params that require grad (LoRA + projections + SOS/EOS)
+        optimizer = AdamW((p for p in self.model.parameters() if p.requires_grad), lr=self._base_lr)
+
+        if self._scheduler_type == "StepLR":
+            scheduler = StepLR(optimizer, step_size=self._step_size, gamma=self._gamma)
+            step_type = "epoch"
+        elif self._scheduler_type == "CosineAnnealingLR":
+            T_max = self._T_max if self._T_max is not None else self.trainer.max_epochs
+            scheduler = CosineAnnealingLR(optimizer, T_max=T_max, eta_min=self._eta_min)
+            step_type = "epoch"
+        elif self._scheduler_type == "HF_CosineWithWarmup":
+            if self._num_training_steps is None:
+                if hasattr(self.trainer, "estimated_stepping_batches") and self.trainer.estimated_stepping_batches:
+                    total_steps = int(self.trainer.estimated_stepping_batches)
+                else:
+                    raise ValueError("num_training_steps was not provided and could not be inferred from Trainer.")
+            else:
+                total_steps = int(self._num_training_steps)
+
+            scheduler = get_cosine_schedule_with_warmup(
+                optimizer,
+                num_warmup_steps=int(self._warmup_steps),
+                num_training_steps=total_steps,
+            )
+            step_type = "step"
+        else:
+            raise ValueError(f"Unsupported scheduler_type: {self._scheduler_type}")
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": step_type,
+                "frequency": 1,
+                "monitor": "val_loss"
+            },
+        }
+
+    def on_save_checkpoint(self, checkpoint):
+        if "state_dict" in checkpoint:
+            keys_to_drop = [k for k in checkpoint["state_dict"].keys() if k.startswith("clap.")]
+            for k in keys_to_drop:
+                checkpoint["state_dict"].pop(k, None)
+
+    # ==== NEW/CHANGED ==== export LoRA adapter after training
+    def on_train_end(self):
+        # If self.model.gpt2 is a PEFT model, this will save only the LoRA adapter
+        if hasattr(self.model.gpt2, "save_pretrained"):
+            os.makedirs(self._lora_save_dir, exist_ok=True)
+            self.model.gpt2.save_pretrained(self._lora_save_dir)
+            print(f"Saved LoRA adapter to: {self._lora_save_dir}")
+
+# ============================
+# Build datasets & dataloaders
+# ============================
+train_ata_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/AudioMAE_emb_GPT2_training/train/"
+val_data_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/AudioMAE_emb_GPT2_training/val/"
+train_dataset = TestAudioDataset(data_path=train_ata_path)
+val_dataset = TestAudioDataset(data_path=val_data_path)
+
+num_workers = os.cpu_count() -2  # or multiprocessing.cpu_count()
+print(f"Number of CPUs: {num_workers}")
+
+batch_size = 24
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, prefetch_factor=4, pin_memory=True)
+val_loader   = DataLoader(val_dataset,   batch_size=batch_size, shuffle=False, num_workers=num_workers, prefetch_factor=4, pin_memory=True)
+
+# ============================
+# CLAP (frozen, eval)
+# ============================
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+pretrained_path = r"/Volumes/gen_audio_catalog/volumes/ziyi/Checkpoint_AudioLDM2/clap_htsat_tiny.pt".replace("\\", "/")
+
+model_clap = CLAPAudioEmbeddingClassifierFreev2(
+    pretrained_path=pretrained_path,
+    embed_mode="text",
+    amodel="HTSAT-tiny",
+    unconditional_prob=0.0,
+    training_mode=False,
+).to(device)
+model_clap.eval()  # deterministic inference
+
+
+# ============================
+# Paths / Experiment naming (CSV logs + checkpoints + outputs)
+# ============================
+LOG_DIR = r"/Volumes/gen_audio_catalog/volumes/ziyi/GPT2_PEFT_training/logs".replace("\\", "/")
+CKPT_DIR = r"/Volumes/gen_audio_catalog/volumes/ziyi/GPT2_PEFT_training/checkpoints".replace("\\", "/")
+OUTPUT_DIR = r"/Volumes/gen_audio_catalog/volumes/ziyi/GPT2_PEFT_training/outputs".replace("\\", "/")
+lora_save_dir = r"/Volumes/gen_audio_catalog/volumes/ziyi/GPT2_PEFT_training/outputs".replace("\\", "/")
+
+EXP_NAME = "clap2gpt2"
+# Timestamped run for uniqueness; you can set a fixed string if preferred.
+RUN_VERSION = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# Ensure directories exist
+os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(CKPT_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(lora_save_dir, exist_ok=True)
+
+# CSV Logger (only)
+csv_logger = CSVLogger(
+    save_dir=LOG_DIR,
+    name=f"{EXP_NAME}_csv",   # folder name under LOG_DIR
+    version=RUN_VERSION
+)
+
+
+# ============================
+# Lightning module
+# ============================
+max_epochs = 30
+total_steps = max_epochs * len(train_loader)
+warmup_steps = int(0.1 * total_steps)
+
+log_every_n_steps = np.floor(len(train_dataset)/(10*batch_size))
+
+# print training, validation data size
+print(f"Training samples: {len(train_dataset)}, Validation samples: {len(val_dataset)}")
+# print total steps and warmup steps
+print(f"Total training steps: {total_steps}, Warmup steps: {warmup_steps}")
+
+
+lit_model = LitCLAPToGPT2(
+    clap_model=model_clap,
+    sequence_input_key=["Clap_text_encoder"],
+    sequence_input_embed_dim=[512],
+    target_embed_dim=768,
+    max_seq_len=1024,
+    mae_token_num=0,
+    gpt2_name="gpt2",
+    # training config
+    base_lr=1e-4,
+    warmup_steps=warmup_steps,
+    scheduler_type="HF_CosineWithWarmup",
+    step_size=10,
+    gamma=0.8,
+    T_max=None,
+    eta_min=1e-6,
+    log_every_n_steps=log_every_n_steps,
+    num_training_steps=total_steps,
+    # ==== NEW/CHANGED ==== LoRA config (tune as needed)
+    use_lora=True,
+    lora_r=8,
+    lora_alpha=16,
+    lora_dropout=0.05,
+    lora_target_modules=("c_attn", "c_fc", "c_proj"),
+    lora_save_dir=lora_save_dir,
+)
+
+# ============================
+# Callbacks: checkpoint + early stop
+# ============================
+checkpoint_cb = ModelCheckpoint(
+    dirpath=os.path.join(CKPT_DIR, EXP_NAME, RUN_VERSION),  # <-- checkpoints path,
+    filename="GPT2_{epoch}_{val_loss:.4f}",
+    save_top_k=1,
+    verbose=True,
+    monitor="val_loss",
+    mode="min",
+)
+
+early_stop_cb = EarlyStopping(
+    monitor="val_loss",
+    mode="min",
+    patience=5,  # P
+    verbose=True,
+)
+
+# ============================
+# Trainer
+# ============================
+trainer = pl.Trainer(
+    max_epochs=max_epochs,
+    accelerator="auto",
+    devices="auto",
+    precision="16-mixed" if torch.cuda.is_available() else "32-true",
+    log_every_n_steps=log_every_n_steps,
+    callbacks=[checkpoint_cb, early_stop_cb],
+)
+
+# ============================
+# Fit
+# ============================
+trainer.fit(lit_model, train_dataloaders=train_loader, val_dataloaders=val_loader)
