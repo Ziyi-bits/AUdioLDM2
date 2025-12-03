@@ -38,7 +38,7 @@ CLAP_WEIGHTS = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-t
 OUT_DIR = r"C:\Users\ZiXu\Downloads\gpt2_output".replace("\\", "/")
 # Prompts (batch inference supported)
 PROMPTS = [
-    "a calm ambient soundscape with gentle pads"
+    "A woman talks and a baby whispers"
 ]
 # PROMPTS = [
 #     "a calm ambient soundscape with gentle pads",
