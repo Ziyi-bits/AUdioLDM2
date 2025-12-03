@@ -28,7 +28,7 @@ print("Current working directory:", os.getcwd())
 
 
 
-cfg_path  = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning\audioldm_train\config\2023_08_23_reproduce_audioldm\audioldm2_full.yaml".replace("\\", "/")
+cfg_path  = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning\audioldm_train\config\2023_08_23_reproduce_audioldm\audioldm_original.yaml".replace("\\", "/")
 ckpt_path = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning\data\checkpoints\vae_mel_16k_64bins.ckpt".replace("\\", "/")
 MAE_emb_path = r"C:\Users\ZiXu\Downloads\gpt2_output\0000_20251104_171136_mae_embeds.npy".replace("\\", "/")
 MAE_attn_path = r"C:\Users\ZiXu\Downloads\gpt2_output\0000_20251104_171136_mae_attn_mask.npy".replace("\\", "/")
@@ -102,26 +102,39 @@ sf.write(save_path, wav, samplerate=model.sampling_rate)
 print(f"Audio saved to: {save_path}")
 
 
-# import torch
+########################################## quick check code ##########################################
 # import os
 # import sys
 #
 # # Absolute path to your project root (where `data/` lives)
 # project_root = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning".replace("\\", "/")
 #
+# # Change working directory
+# os.chdir(project_root)
+#
+# # Optional: Add project root to sys.path for imports
+# sys.path.append(project_root)
+#
+# print("Current working directory:", os.getcwd())
+#
+# import torch
+#
 # # 1) Load your trained LatentDiffusion checkpoint
 # #    (make sure the same config is used as in training)
 # from audioldm_train.utilities.model_util import instantiate_from_config
 # from omegaconf import OmegaConf
+# import numpy as np
 #
-# cfg_path  = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning\audioldm_train\config\2023_08_23_reproduce_audioldm\audioldm2_full.yaml".replace("\\", "/")
+# cfg_path  = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning\audioldm_train\config\2023_08_23_reproduce_audioldm\audioldm_original.yaml".replace("\\", "/")
 # ckpt_path = r"C:\Users\ZiXu\Documents\Python_Scripts\Git\AudioDLM2\AudioLDM-training-finetuning\data\checkpoints\vae_mel_16k_64bins.ckpt".replace("\\", "/")
-# MAE_emb_path = r"C:\Users\ZiXu\Downloads\gpt2_output\0000_20251104_171136_clap_emb.npy".replace("\\", "/")
+# MAE_emb_path = r"C:\Users\ZiXu\Downloads\gpt2_output\0000_20251104_171136_mae_embeds.npy".replace("\\", "/")
 # MAE_attn_path = r"C:\Users\ZiXu\Downloads\gpt2_output\0000_20251104_171136_mae_attn_mask.npy".replace("\\", "/")
+# # --- paths you must fill ---
+# save_path  = r"C:\Users\ZiXu\Downloads\gpt2_output\generated_ddpm_audiomae.wav".replace("\\", "/")
 #
-# cfg = OmegaConf.load("path/to/your/config.yaml")  # the config used to train this model
+# cfg = OmegaConf.load(cfg_path)  # the config used to train this model
 # ldm = instantiate_from_config(cfg.model)
-# ckpt = torch.load("path/to/your/ldm.ckpt", map_location="cpu")
+# ckpt = torch.load(ckpt_path, map_location="cpu")
 # missing, unexpected = ldm.load_state_dict(ckpt.get("state_dict", ckpt), strict=False)
 # print("Missing:", len(missing), "Unexpected:", len(unexpected))
 #
@@ -130,9 +143,15 @@ print(f"Audio saved to: {save_path}")
 # # 2) Prepare AudioMAE context
 # #    Suppose you already have AudioMAE outputs: `audiomae_tokens` of shape [B, N, 768]
 # #    and (optionally) a binary mask `audiomae_mask` of shape [B, N]
-# audiomae_tokens = your_audiomae_tokens.float().cuda()      # [B, N, D]
-# if "audiomae_mask" in locals() and audiomae_mask is not None:
-#     attn_mask = audiomae_mask.bool().cuda()                # [B, N]
+# your_audiomae_tokens = torch.from_numpy(
+#     np.load(MAE_emb_path)
+# )  # [B, N, D], e.g. D=768
+# your_audiomae_mask = torch.from_numpy(
+#     np.load(MAE_attn_path)
+# )  # [B, N], binary mask (1 for valid tokens, 0 for padding)
+# audiomae_tokens = your_audiomae_tokens.float()      # [B, N, D]
+# if "audiomae_mask" in locals() and your_audiomae_mask is not None:
+#     attn_mask = your_audiomae_mask.bool()               # [B, N]
 # else:
 #     attn_mask = torch.ones(audiomae_tokens.size()[:2], dtype=torch.bool, device=audiomae_tokens.device)
 #
