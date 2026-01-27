@@ -21,7 +21,9 @@ import torch
 import soundfile as sf
 from omegaconf import OmegaConf
 from audioldm_train.utilities.model_util import instantiate_from_config
+from audioldm_train.modules.latent_diffusion.ddpm import LatentDiffusion
 import numpy as np
+from huggingface_hub import hf_hub_download
 
 import os
 print("Current working directory:", os.getcwd())
@@ -42,17 +44,42 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # -----------------------------
 # 2. Load Model
 # -----------------------------
+def download_checkpoint(checkpoint_name="audioldm2-full"):
+    if("audioldm2-speech" in checkpoint_name):
+        model_id = "haoheliu/audioldm2-speech"
+    else:
+        model_id = "haoheliu/%s" % checkpoint_name
+
+    checkpoint_path = hf_hub_download(
+        repo_id=model_id,
+        filename=checkpoint_name+".pth"
+    )
+    return checkpoint_path
+model_name = "audioldm2-full"
+ckpt_path = download_checkpoint(model_name)
+
 print("Loading model...")
 config = OmegaConf.load(cfg_path)
-model = instantiate_from_config(config["model"])
+latent_diffusion = LatentDiffusion(**config["model"]["params"])
 
-state = torch.load(ckpt_path, map_location="cpu")
-state_dict = state["state_dict"] if "state_dict" in state else state
-missing, unexpected = model.load_state_dict(state_dict, strict=False)
-print(f"Loaded checkpoint with {len(missing)} missing and {len(unexpected)} unexpected keys")
+resume_from_checkpoint = ckpt_path
 
-model = model.to(device).eval()
-model.conditional_dry_run_finished = True  # Disable unconditional CFG during inference
+checkpoint = torch.load(resume_from_checkpoint, map_location=device)
+
+latent_diffusion.load_state_dict(checkpoint["state_dict"])
+
+latent_diffusion.eval()
+latent_diffusion = latent_diffusion.to(device)
+# config = OmegaConf.load(cfg_path)
+# model = instantiate_from_config(config["model"])
+#
+# state = torch.load(ckpt_path, map_location="cpu")
+# state_dict = state["state_dict"] if "state_dict" in state else state
+# missing, unexpected = model.load_state_dict(state_dict, strict=False)
+# print(f"Loaded checkpoint with {len(missing)} missing and {len(unexpected)} unexpected keys")
+#
+# model = model.to(device).eval()
+# model.conditional_dry_run_finished = True  # Disable unconditional CFG during inference
 
 # -----------------------------
 # 3. Prepare AudioMAE Conditions
