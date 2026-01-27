@@ -326,9 +326,9 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
         # Log LR every n steps and also aggregate per epoch
         if self.global_step % self._log_every_n_steps == 0:
             cur_lr = optim.param_groups[0]["lr"]
-            self.log("train/lr", cur_lr, on_step=True, on_epoch=True, prog_bar=True)
+            self.log("train_lr", cur_lr, on_step=True, on_epoch=True, prog_bar=True)
         # Log loss only per epoch
-        self.log("train/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
 
@@ -351,7 +351,7 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
         output = self(cond_dict, target_embeds, target_mask)
         val_loss = self.loss_fn(output, target_embeds)
 
-        self.log("val/loss", val_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True)
+        self.log("val_loss", val_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True)
         return val_loss
 
     # --------- Optim / Schedulers ----------
@@ -392,7 +392,7 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
                 "scheduler": scheduler,
                 "interval": step_type,   # step the scheduler every epoch. If using HF_CosineWithWarmup, use "step"!!!!!!
                 "frequency": 1,
-                "monitor": "val/loss"  # used by EarlyStopping/ModelCheckpoint if configured
+                "monitor": "val_loss"  # used by EarlyStopping/ModelCheckpoint if configured
             },
         }
 
@@ -473,12 +473,12 @@ checkpoint_cb = ModelCheckpoint(
     filename="best_model",
     save_top_k=1,
     verbose=True,
-    monitor="val/loss",
+    monitor="val_loss",
     mode="min",
 )
 
 early_stop_cb = EarlyStopping(
-    monitor="val/loss",
+    monitor="val_loss",
     mode="min",
     patience=5,  # P
     verbose=True,
