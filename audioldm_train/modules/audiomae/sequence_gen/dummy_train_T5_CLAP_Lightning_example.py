@@ -74,9 +74,15 @@ class TestAudioDataset(Dataset):
         #read numpy array
         numpy_struct = np.load(os.path.join(self.embed_file_path, embed_file))
         embed_data = torch.from_numpy(numpy_struct).float()  # [S_tgt, H]
+        # if embed_data has more than 2 dimentions, squeeze it and remove the first two dimension
+        if embed_data.dim() > 2:
+            embed_data = embed_data.squeeze(0)
         # Load attention mask
         attention_file = file_id + self.embed_file_extension
         attention_struct = np.load(os.path.join(self.attention_file_path, attention_file))
+        # if attention_struct has more than 1 dimentions, squeeze it and remove the first dimension
+        if attention_struct.ndim > 1:
+            attention_struct = attention_struct.squeeze(0)
         attention_mask = torch.from_numpy(attention_struct).long()  # [S_tgt]
 
         return {
@@ -99,7 +105,7 @@ class GPT2SequenceModel(nn.Module):
 # ---------------------------
 # CLAP-to-GPT2 adapter logic and GPT-2 backbone into one trainable model
 # ---------------------------
-class CLAPToGPT2(nn.Module):
+class CLAPT5ToGPT2(nn.Module):
     """
     Combines CLAP-to-GPT2 adapter logic and GPT-2 backbone into one trainable model.
     Handles:
@@ -223,7 +229,7 @@ class CLAPToGPT2(nn.Module):
         output = output_embeds[:, cond_end_idx - 1 : -1, :]  # [B, S_tgt, H]
         return output
 
-class LitCLAPToGPT2(pl.LightningModule):
+class LitCLAPT5ToGPT2(pl.LightningModule):
     def __init__(
         self,
         clap_model,                          # frozen CLAP (nn.Module)
@@ -259,7 +265,7 @@ class LitCLAPToGPT2(pl.LightningModule):
             p.requires_grad = False
 
         # ---- Core model (trainable) ----
-        self.model = CLAPToGPT2(
+        self.model = CLAPT5ToGPT2(
             sequence_input_key=sequence_input_key,
             sequence_input_embed_dim=sequence_input_embed_dim,
             target_embed_dim=target_embed_dim,
@@ -400,7 +406,7 @@ class LitCLAPToGPT2(pl.LightningModule):
 # ============================
 # Build datasets & dataloaders
 # ============================
-data_path = r"C:\Users\ZiXu\Documents\Python_Scripts\mae_output".replace("\\", "/")
+data_path = r"C:\Users\ZiXu\Documents\Python_Scripts\mae_output_new".replace("\\", "/")
 full_dataset = TestAudioDataset(data_path=data_path)
 
 val_ratio = 0.2
@@ -438,7 +444,7 @@ max_epochs = 30
 total_steps = max_epochs * len(train_loader)
 warmup_steps = int(0.1 * total_steps)
 
-lit_model = LitCLAPToGPT2(
+lit_model = LitCLAPT5ToGPT2(
     clap_model=model_clap,
     T5_model=model_T5,
     sequence_input_key=["Clap_text_encoder", "T5_text_encoder"],
