@@ -396,10 +396,11 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
             },
         }
 
-    # (Optional) keep checkpoints light by not saving CLAP weights
+    # (Optional) keep checkpoints light by not saving CLAP and T5 weights
     def on_save_checkpoint(self, checkpoint):
-        if "state_dict" in checkpoint:
-            keys_to_drop = [k for k in checkpoint["state_dict"].keys() if k.startswith("clap.")]
+        if "state_dict" in checkpoint and isinstance(checkpoint["state_dict"], dict):
+            drop_prefixes = ("clap.", "T5.")
+            keys_to_drop = [k for k in list(checkpoint["state_dict"].keys()) if k.startswith(drop_prefixes)]
             for k in keys_to_drop:
                 checkpoint["state_dict"].pop(k, None)
 
@@ -414,7 +415,7 @@ val_size = int(len(full_dataset) * val_ratio)
 train_size = len(full_dataset) - val_size
 train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 
-batch_size = 1
+batch_size = 2
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 val_loader   = DataLoader(val_dataset,   batch_size=batch_size, shuffle=False, num_workers=0)
 
