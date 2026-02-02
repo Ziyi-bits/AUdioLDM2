@@ -218,9 +218,9 @@ def main():
             raise ValueError(f"Input folder not found: {cfg['input_folder']}")
         os.makedirs(cfg["output_folder"], exist_ok=True)
         class Args:
-            input_folder = cfg["input_folder"]
-            output_folder = cfg["output_folder"]
-            checkpoint = cfg["checkpoint"]
+            input_folder = cfg["input_folder"].replace("\\", "/")
+            output_folder = cfg["output_folder"].replace("\\", "/")
+            checkpoint = cfg["checkpoint"].replace("\\", "/")
             device = cfg["device"]
             batch_size = cfg["batch_size"]
             max_seq_len = cfg["max_seq_len"]
