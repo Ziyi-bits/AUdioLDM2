@@ -194,7 +194,7 @@ def collate_text(batch):
 DEFAULT_CONFIG = {
     "input_folder": r"C:\Users\ZiXu\Documents\Python_Scripts\mae_output_new\texts",   # change to your .txt folder
     "output_folder": r"C:\Users\ZiXu\Documents\Python_Scripts\AudioLDM_GPT2_output", # change to your desired output folder
-    "checkpoint": r"C:\Users\ZiXu\Documents\Python_Scripts\AudioLDM_GPT2_Checkpoint\checkpoints\clapT52gpt2\20260129_141524\GPT2_epoch=24_val_loss=0.1198.ckpt", # change to your Lightning checkpoint
+    "checkpoint": r"C:\Users\ZiXu\Documents\Python_Scripts\AudioLDM_GPT2_Checkpoint\checkpoints\clapT52gpt2\20260202_140247\GPT2_epoch=10_val_loss=0.0291.ckpt", # change to your Lightning checkpoint
     "device": "auto",            # "auto" | "cpu" | "cuda"
     "batch_size": 1,              # keep 1 for per-file inference
     "max_seq_len": 1024,
@@ -340,6 +340,22 @@ def main():
             }
             np.save(out_path, np.array(out_dict, dtype=object), allow_pickle=True)
             print(f"Saved: {out_path}")
+
+            # save another version with gpt-2 being normalized between +1 and -1 by dividing max abs value
+            gpt2_max = torch.max(torch.abs(gpt2_pred))
+            gpt2_norm = gpt2_pred / gpt2_max
+            out_folder_norm = args.output_folder + '_norm'
+            os.makedirs(out_folder_norm, exist_ok=True)
+            out_path_norm = os.path.join(out_folder_norm, os.path.splitext(fname)[0] + '.npy')
+            out_dict_norm = {
+                'text': texts[0],
+                'gpt2_prediction_normalized': gpt2_norm.detach().cpu().numpy(),
+                't5_hidden': t5_hidden.detach().cpu().numpy(),
+                't5_mask': t5_mask.detach().cpu().numpy(),
+            }
+            np.save(out_path_norm, np.array(out_dict_norm, dtype=object), allow_pickle=True)
+            print(f"Saved normalized: {out_path_norm}")
+
 
 
 if __name__ == "__main__":
