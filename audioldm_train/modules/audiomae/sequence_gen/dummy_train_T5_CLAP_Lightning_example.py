@@ -249,6 +249,9 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
         T_max=None,                          # for CosineAnnealingLR
         eta_min=1e-6,
         num_training_steps=None,
+        # variance loss
+        use_variance_loss=False,             # flag to enable variance loss
+        variance_weight=0.1,                 # weight for variance loss component
         # logging
         log_every_n_steps=50,
     ):
@@ -275,6 +278,8 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
         )
 
         self.loss_fn = nn.L1Loss()
+        self.use_variance_loss = use_variance_loss
+        self.variance_weight = variance_weight
         self._base_lr = float(base_lr)
         self._warmup_steps = int(warmup_steps)
         self._scheduler_type = scheduler_type
@@ -292,6 +297,31 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
             new_lr = self._base_lr * (float(self.global_step) / float(self._warmup_steps))
             for pg in optimizer.param_groups:
                 pg["lr"] = new_lr
+
+    def compute_loss(self, output, target_embeds):
+        """
+        Compute loss with optional variance matching component.
+
+        Args:
+            output: [B, S_tgt, H] - predicted embeddings
+            target_embeds: [B, S_tgt, H] - ground truth embeddings
+
+        Returns:
+            tuple: (total_loss, l1_loss, var_loss) if use_variance_loss else (l1_loss, l1_loss, None)
+        """
+        # Standard L1 loss
+        l1_loss = self.loss_fn(output, target_embeds)
+
+        if self.use_variance_loss:
+            # Variance matching loss (per-feature variance across sequence dimension)
+            output_var = output.var(dim=1, keepdim=True)  # [B, 1, H]
+            target_var = target_embeds.var(dim=1, keepdim=True)  # [B, 1, H]
+            var_loss = nn.functional.mse_loss(output_var, target_var)
+
+            total_loss = l1_loss + self.variance_weight * var_loss
+            return total_loss, l1_loss, var_loss
+        else:
+            return l1_loss, l1_loss, None
 
     # --------- Forward ----------
     def forward(self, cond_dict, target_embeds, target_mask):
@@ -314,9 +344,9 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
         target_embeds = target_embeds.to(self.device)      # [B, S_tgt, 768]
         target_mask = target_mask.to(self.device).float()  # [B, S_tgt]
 
-        # 3) Forward & loss (unmasked L1 to match your script)
+        # 3) Forward & loss
         output = self(cond_dict, target_embeds, target_mask)  # [B, S_tgt, 768]
-        loss = self.loss_fn(output, target_embeds)
+        total_loss, l1_loss, var_loss = self.compute_loss(output, target_embeds)
 
         # 4) Apply step-based warmup (overrides scheduler during warmup)
         optim = self.optimizers()
@@ -327,10 +357,14 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
         if self.global_step % self._log_every_n_steps == 0:
             cur_lr = optim.param_groups[0]["lr"]
             self.log("train_lr", cur_lr, on_step=True, on_epoch=True, prog_bar=True)
-        # Log loss only per epoch
-        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
-        return loss
+        # Log losses
+        self.log("train_l1_loss", l1_loss, on_step=False, on_epoch=True)
+        if self.use_variance_loss and var_loss is not None:
+            self.log("train_var_loss", var_loss, on_step=False, on_epoch=True)
+        self.log("train_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True)
+
+        return total_loss
 
     # --------- Validation ----------
     def validation_step(self, batch, batch_idx):
@@ -349,10 +383,15 @@ class LitCLAPT5ToGPT2(pl.LightningModule):
         target_mask = target_mask.to(self.device).float()
 
         output = self(cond_dict, target_embeds, target_mask)
-        val_loss = self.loss_fn(output, target_embeds)
+        total_loss, l1_loss, var_loss = self.compute_loss(output, target_embeds)
 
-        self.log("val_loss", val_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True)
-        return val_loss
+        # Log losses
+        self.log("val_l1_loss", l1_loss, prog_bar=False, on_step=False, on_epoch=True, logger=True)
+        if self.use_variance_loss and var_loss is not None:
+            self.log("val_var_loss", var_loss, prog_bar=False, on_step=False, on_epoch=True, logger=True)
+        self.log("val_loss", total_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True)
+
+        return total_loss
 
     # --------- Optim / Schedulers ----------
     def configure_optimizers(self):
@@ -463,7 +502,10 @@ lit_model = LitCLAPT5ToGPT2(
     T_max=None,     # default to max_epochs
     eta_min=1e-6,
     log_every_n_steps=4,
-    num_training_steps=total_steps
+    num_training_steps=total_steps,
+    # variance loss config
+    use_variance_loss=True,      # Set to True to enable variance loss
+    variance_weight=0.1,         # Weight for variance loss component
 )
 
 # ============================
