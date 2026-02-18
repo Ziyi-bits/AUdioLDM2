@@ -788,7 +788,8 @@ class DDPM(pl.LightningModule):
                 print("Error encountered during evaluation: ", e)
 
         # Very important or the program may fail
-        torch.cuda.synchronize()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
 
         for key in self.cond_stage_model_metadata.keys():
             metadata = self.cond_stage_model_metadata[key]
@@ -1063,6 +1064,7 @@ class LatentDiffusion(DDPM):
             print("Diffusion model optimizing logvar")
             params.append(self.logvar)
         opt = torch.optim.AdamW(params, lr=lr)
+
         # if self.use_scheduler:
         #     assert "target" in self.scheduler_config
         #     scheduler = instantiate_from_config(self.scheduler_config)
@@ -1759,21 +1761,29 @@ class LatentDiffusion(DDPM):
         )
 
     def save_waveform(self, waveform, savepath, name="outwav"):
-        for i in range(waveform.shape[0]):
-            if type(name) is str:
+        total = waveform.shape[0]
+        if isinstance(name, list):
+            name_list = name
+            name_count = len(name_list)
+        else:
+            name_list = None
+            name_count = 0
+        for i in range(total):
+            if isinstance(name, str):
                 path = os.path.join(
                     savepath, "%s_%s_%s.wav" % (self.global_step, i, name)
                 )
-            elif type(name) is list:
-                path = os.path.join(
-                    savepath,
-                    "%s.wav"
-                    % (
-                        os.path.basename(name[i])
-                        if (not ".wav" in name[i])
-                        else os.path.basename(name[i]).split(".")[0]
-                    ),
-                )
+            elif isinstance(name, list):
+                if name_count == 0:
+                    base_name = f"outwav_{i}"
+                    gen_idx = 0
+                else:
+                    name_idx = i % name_count
+                    gen_idx = i // name_count
+                    base_name = os.path.splitext(os.path.basename(name_list[name_idx]))[0]
+                    if gen_idx > 0:
+                        base_name = f"{base_name}_gen{gen_idx}"
+                path = os.path.join(savepath, f"{base_name}.wav")
             else:
                 raise NotImplementedError
             todo_waveform = waveform[i, 0]
