@@ -1,4 +1,4 @@
-metadata_root: "./data/dataset/metadata/dataset_root.json"
+metadata_root: "C:/Users/ZiXu/Documents/Python_Scripts/Git/AudioDLM2/AudioLDM-training-finetuning/data/dataset/metadata/dataset_root.json"
 log_directory: "./log/latent_diffusion"
 project: "audioldm"
 precision: "high"
