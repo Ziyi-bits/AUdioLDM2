@@ -135,32 +135,37 @@ def main(configs, config_yaml_path, exp_group_name, exp_name, perform_validation
         print("Train from scratch")
         resume_from_checkpoint = None
 
-    devices = torch.cuda.device_count()
+    devices = torch.cuda.device_count() if torch.cuda.is_available() else 1
 
     latent_diffusion = instantiate_from_config(configs["model"])
     latent_diffusion.set_log_dir(log_path, exp_group_name, exp_name)
 
-    wandb_logger = WandbLogger(
-        save_dir=wandb_path,
-        project=configs["project"],
-        config=configs,
-        name="%s/%s" % (exp_group_name, exp_name),
-    )
+    # wandb_logger = WandbLogger(
+    #     save_dir=wandb_path,
+    #     project=configs["project"],
+    #     config=configs,
+    #     name="%s/%s" % (exp_group_name, exp_name),
+    # )
 
     latent_diffusion.test_data_subset_path = test_data_subset_folder
 
     print("==> Save checkpoint every %s steps" % save_checkpoint_every_n_steps)
     print("==> Perform validation every %s epochs" % validation_every_n_epochs)
 
+    use_cuda = torch.cuda.is_available()
+    accelerator = "gpu" if use_cuda else "cpu"
+    strategy = DDPStrategy(find_unused_parameters=True) if use_cuda and devices > 1 else "auto"
+    print("==> Training on %s" % ("CUDA" if use_cuda else "CPU"))
+
     trainer = Trainer(
-        accelerator="gpu",
+        accelerator=accelerator,
         devices=devices,
-        logger=wandb_logger,
+        logger=False,  # wandb_logger,
         max_steps=max_steps,
         num_sanity_val_steps=1,
         limit_val_batches=limit_val_batches,
         check_val_every_n_epoch=validation_every_n_epochs,
-        strategy=DDPStrategy(find_unused_parameters=True),
+        strategy=strategy,
         callbacks=[checkpoint_callback],
     )
 
@@ -228,7 +233,6 @@ if __name__ == "__main__":
 
     perform_validation = args.val
 
-    assert torch.cuda.is_available(), "CUDA is not available"
 
     config_yaml = args.config_yaml
 
