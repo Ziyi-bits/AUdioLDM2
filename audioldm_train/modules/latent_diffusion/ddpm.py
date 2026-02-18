@@ -198,6 +198,10 @@ class DDPM(pl.LightningModule):
         self.logger_exp_group_name = exp_group_name
         self.logger_exp_name = exp_name
 
+    def _sanitize_folder_name(self, name: str) -> str:
+        # Windows disallows ':' in folder names; keep it cross-platform safe.
+        return name.replace(":", "-")
+
     def register_schedule(
         self,
         given_betas=None,
@@ -741,13 +745,16 @@ class DDPM(pl.LightningModule):
 
     def get_validation_folder_name(self):
         now = datetime.datetime.now()
-        timestamp = now.strftime("%m-%d-%H:%M")
-        return "val_%s_%s_cfg_scale_%s_ddim_%s_n_cand_%s" % (
-            self.global_step,
-            timestamp,
-            self.evaluation_params["unconditional_guidance_scale"],
-            self.evaluation_params["ddim_sampling_steps"],
-            self.evaluation_params["n_candidates_per_samples"],
+        timestamp = now.strftime("%m-%d-%H-%M")
+        return self._sanitize_folder_name(
+            "val_%s_%s_cfg_scale_%s_ddim_%s_n_cand_%s"
+            % (
+                self.global_step,
+                timestamp,
+                self.evaluation_params["unconditional_guidance_scale"],
+                self.evaluation_params["ddim_sampling_steps"],
+                self.evaluation_params["n_candidates_per_samples"],
+            )
         )
 
     def on_validation_epoch_end(self) -> None:
@@ -1867,6 +1874,8 @@ class LatentDiffusion(DDPM):
         use_ddim = ddim_steps is not None
         if name is None:
             name = self.get_validation_folder_name()
+        else:
+            name = self._sanitize_folder_name(str(name))
 
         waveform_save_path = os.path.join(self.get_log_dir(), name)
         waveform_save_path = waveform_save_path.replace("val_0", "infer")
