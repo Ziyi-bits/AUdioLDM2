@@ -1,4 +1,4 @@
-metadata_root: "C:/Users/ZiXu/Documents/Python_Scripts/Git/AudioDLM2/AudioLDM-training-finetuning/data/dataset/metadata/dataset_root.json"
+metadata_root: "./data/dataset/metadata/dataset_root.json"
 log_directory: "./log/latent_diffusion"
 project: "audioldm"
 precision: "high"
@@ -142,5 +142,5 @@ model:
 
     evaluation_params:
       unconditional_guidance_scale: 3.5
-      ddim_sampling_steps: 200
+      ddim_sampling_steps: 1
       n_candidates_per_samples: 3
