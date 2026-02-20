@@ -15,7 +15,7 @@ def run_diffusion(dry_run: bool) -> None:
         "audioldm_train",
         "config",
         "2023_08_23_reproduce_audioldm",
-        "audioldm_crossattn_flant5.yaml",
+        "audioldm_crossattn_Ziyi.yaml",
     )
 
     # Command arguments (equivalent to the terminal command in the request)
