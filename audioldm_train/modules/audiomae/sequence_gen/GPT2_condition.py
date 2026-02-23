@@ -6,14 +6,16 @@ CLAP (text) + FLAN-T5 encoders, restores the Lightning-wrapped GPT-2 adapter wei
 and returns the normalized GPT-2 predictions on the caller's device.
 """
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 from transformers import GPT2Model
 
-from audioldm_train.conditional_models import CLAPAudioEmbeddingClassifierFreev2, FlanT5HiddenState
+if TYPE_CHECKING:
+    # Only for type checkers to avoid circular imports at runtime
+    from audioldm_train.conditional_models import CLAPAudioEmbeddingClassifierFreev2, FlanT5HiddenState
 
 
 _DEFAULT_GPT2_CKPT = (
@@ -171,10 +173,16 @@ def _load_models(
     max_seq_len: int,
     gpt2_name: str,
     clap_checkpoint_path: Optional[str],
-) -> Tuple[LitCLAPT5ToGPT2, CLAPAudioEmbeddingClassifierFreev2, FlanT5HiddenState]:
+) -> Tuple[LitCLAPT5ToGPT2, torch.nn.Module, torch.nn.Module]:
     key = (str(device), Path(checkpoint_path).resolve(), max_seq_len, gpt2_name, clap_checkpoint_path)
     if key in _ModelCache:
         return _ModelCache[key]
+
+    # Local import to break circular dependency with conditional_models
+    from audioldm_train.conditional_models import (
+        CLAPAudioEmbeddingClassifierFreev2,
+        FlanT5HiddenState,
+    )
 
     clap_ckpt = _resolve_clap_checkpoint(clap_checkpoint_path)
     if not Path(checkpoint_path).is_file():
@@ -223,7 +231,7 @@ def generate_gpt2_condition(
     max_seq_len: int = 1024,
     gpt2_name: str = "gpt2",
     clap_checkpoint_path: Optional[str] = None,
-) -> torch.Tensor:
+) -> List[torch.Tensor]:
     """Generate normalized GPT-2 conditioning embeddings for a batch of texts.
 
     Args:
@@ -237,7 +245,7 @@ def generate_gpt2_condition(
 
     Returns:
         Tensor of shape [batch, sequence_len, 768] containing ``gpt2_prediction_normalized``
-        on the requested device.
+        on the requested device, and a matching attention mask of ones with shape [batch, sequence_len].
     """
     if not texts:
         raise ValueError("texts must be a non-empty list of strings")
@@ -260,10 +268,10 @@ def generate_gpt2_condition(
         "T5_text_encoder": [t5_hidden, t5_mask],
     }
 
-    num_tokens = t5_hidden.shape[1]
+    num_tokens = 8
     gpt2_pred = lit_model.generate(cond_dict=cond_dict, num_tokens=num_tokens, device=device)
 
     max_abs = torch.max(torch.abs(gpt2_pred)).clamp(min=1e-12)
     gpt2_norm = gpt2_pred / max_abs
-    return gpt2_norm
-
+    attn_mask = torch.ones((gpt2_norm.size(0), gpt2_norm.size(1)), device=device, dtype=torch.float32)
+    return [gpt2_norm, attn_mask]
