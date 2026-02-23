@@ -81,8 +81,12 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     """
 
     def forward(self, x, emb, context_list=None, mask_list=None):
-        # The first spatial transformer block does not have context
+        # The first spatial transformer block does not have context (self-attention)
         spatial_transformer_id = 0
+        if context_list is None:
+            context_list = []
+        if mask_list is None:
+            mask_list = []
         context_list = [None] + context_list
         mask_list = [None] + mask_list
 
