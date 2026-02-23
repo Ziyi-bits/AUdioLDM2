@@ -41,6 +41,7 @@ from audioldm_train.modules.diffusionmodules.distributions import (
 
 from audioldm_train.modules.latent_diffusion.ddim import DDIMSampler
 from audioldm_train.modules.latent_diffusion.plms import PLMSSampler
+from audioldm_train.modules.audiomae.sequence_gen import generate_gpt2_condition
 import soundfile as sf
 import os
 
@@ -1151,7 +1152,12 @@ class LatentDiffusion(DDPM):
     def instantiate_cond_stage(self, config):
         self.cond_stage_model_metadata = {}
         for i, cond_model_key in enumerate(config.keys()):
-            model = instantiate_from_config(config[cond_model_key])
+            # GPT-2 condition is a standalone function, not an nn.Module;
+            # it is called directly in get_input, so we skip instantiation.
+            if cond_model_key == "crossattn_gpt_2_cond":
+                model = nn.Identity()  # placeholder so indices stay aligned
+            else:
+                model = instantiate_from_config(config[cond_model_key])
             self.cond_stage_models.append(model)
             self.cond_stage_model_metadata[cond_model_key] = {
                 "model_idx": i,
@@ -1253,9 +1259,15 @@ class LatentDiffusion(DDPM):
 
                 # if cond_stage_key is "all", xc will be a dictionary containing all keys
                 # Otherwise xc will be an entry of the dictionary
-                c = self.get_learned_conditioning(
-                    xc, key=cond_model_key, unconditional_cfg=unconditional_cfg
-                )
+                if cond_model_key != "crossattn_gpt_2_cond":
+                    c = self.get_learned_conditioning(
+                        xc, key=cond_model_key, unconditional_cfg=unconditional_cfg
+                    )
+                else:
+
+                    c = generate_gpt2_condition(
+                        texts=xc,  # xc should be a list of strings
+                        device=self.device)
 
                 # cond_dict will be used to condition the diffusion model
                 # If one conditional model return multiple conditioning signal
@@ -1352,7 +1364,8 @@ class LatentDiffusion(DDPM):
         )
 
         if self.optimize_ddpm_parameter:
-            loss, loss_dict = self(x, self.filter_useful_cond_dict(c))
+            # loss, loss_dict = self(x, self.filter_useful_cond_dict(c))
+            loss, loss_dict = self(x, c)
         else:
             loss_dict = {}
             loss = None
@@ -1904,7 +1917,7 @@ class LatentDiffusion(DDPM):
                 if limit_num is not None and i * z.size(0) > limit_num:
                     break
 
-                c = self.filter_useful_cond_dict(c)
+                # c = self.filter_useful_cond_dict(c)
 
                 text = super().get_input(batch, "text")
 
