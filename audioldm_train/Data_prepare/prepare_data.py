@@ -386,8 +386,8 @@ def debug(max_files: int = 10):
 # ---------------------------------------------------------------------------
 # Run configuration — set these before running in a Databricks notebook cell
 # ---------------------------------------------------------------------------
-RUN_MODE = "debug"          # "debug" | "full"
-MERGE_VAL_PORTION = 0.97    # 0.0 = no merging, 0.5 = move 50% of val to train, etc.
+RUN_MODE = "full"          # "debug" | "full"
+MERGE_VAL_PORTION = 0.95    # 0.0 = no merging, 0.5 = move 50% of val to train, etc.
 SEED = 42
 
 # COMMAND ----------
