@@ -197,9 +197,16 @@ def _process_entries(entries, wav_dir, json_path, label=""):
     json_entries = []
     processed_count = 0
     error_count = 0
+    skipped_count = 0
 
     for file_id, caption in tqdm(entries, desc=label, unit="file"):
         flac_path = os.path.join(FLAC_INPUT_DIR, f"{file_id}.flac")
+
+        if not os.path.exists(flac_path):
+            logger.warning("[%s] FLAC file not found, skipping: %s", label, flac_path)
+            skipped_count += 1
+            continue
+
         wav_filename = f"{file_id}.wav"
         wav_output_path = os.path.join(wav_dir, wav_filename)
 
@@ -222,8 +229,8 @@ def _process_entries(entries, wav_dir, json_path, label=""):
     safe_write_text(json_path, json.dumps(output_json, indent=4, ensure_ascii=False))
 
     logger.info(
-        "[%s] Done. Processed: %d | Errors: %d | JSON: %s",
-        label, processed_count, error_count, json_path,
+        "[%s] Done. Processed: %d | Skipped (missing): %d | Errors: %d | JSON: %s",
+        label, processed_count, skipped_count, error_count, json_path,
     )
     return processed_count, error_count
 
@@ -334,6 +341,12 @@ def debug(max_files: int = 10):
 
     for file_id, caption in tqdm(entries, desc="DEBUG", unit="file"):
         flac_path = os.path.join(FLAC_INPUT_DIR, f"{file_id}.flac")
+
+        if not os.path.exists(flac_path):
+            logger.warning("[DEBUG] FLAC file not found, skipping: %s", flac_path)
+            error_count += 1
+            continue
+
         wav_filename = f"{file_id}.wav"
         wav_output_path = os.path.join(VAL_WAV_DIR, wav_filename)
 
