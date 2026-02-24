@@ -35,15 +35,15 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 CSV_FILE_PATH = ["./train.csv", "./val.csv"]
 
 # Mounted-volume directory where the source .flac files are stored
-FLAC_INPUT_DIR = "/dbfs/mnt/my-volume/audiocaps/flac/"  # e.g. <FLAC_INPUT_DIR>/<file_id>.flac
+FLAC_INPUT_DIR = "/Volumes/gen_audio_catalog/volumes/kinh/datasets/AudioSet/full/audio/unbal_train/"  # e.g. <FLAC_INPUT_DIR>/<file_id>.flac
 
 # Root folder for processed .wav files (train/ and val/ sub-folders are created automatically)
-WAV_OUTPUT_DIR = "/dbfs/mnt/my-volume/processed_wav/"
+WAV_OUTPUT_DIR = "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_AudioSet/processed_wav/"
 TRAIN_WAV_DIR = os.path.join(WAV_OUTPUT_DIR, "train")
 VAL_WAV_DIR = os.path.join(WAV_OUTPUT_DIR, "val")
 
 # Paths for the separate training and validation JSON metadata files
-JSON_OUTPUT_DIR = "/dbfs/mnt/my-volume/metadata/"
+JSON_OUTPUT_DIR = "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_AudioSet/metadata/"
 TRAIN_JSON_PATH = os.path.join(JSON_OUTPUT_DIR, "audiocaps_train.json")
 VAL_JSON_PATH = os.path.join(JSON_OUTPUT_DIR, "audiocaps_val.json")
 
@@ -382,11 +382,11 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Prepare audio data for AudioLDM training.")
-    parser.add_argument("--debug", action="store_true", help="Run a quick debug pass on 10 files from val.csv")
+    parser.add_argument("--debug", action="store_true",default=True, help="Run a quick debug pass on 10 files from val.csv")
     parser.add_argument(
         "--merge-val",
         type=float,
-        default=0.0,
+        default=0.97,
         metavar="PORTION",
         help="Move PORTION (0.0–1.0) of val.csv entries into the training set. "
              "The moved files are saved as .wav in the train/ folder and added to "
