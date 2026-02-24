@@ -41,8 +41,9 @@ except NameError:
 TRAIN_CSV_PATH = os.path.join(_SCRIPT_DIR, "train.csv")
 VAL_CSV_PATH = os.path.join(_SCRIPT_DIR, "val.csv")
 
-# Mounted-volume directory where the source .flac files are stored
-FLAC_INPUT_DIR = "/Volumes/gen_audio_catalog/volumes/kinh/datasets/AudioSet/full/audio/unbal_train/"  # e.g. <FLAC_INPUT_DIR>/<file_id>.flac
+# Mounted-volume directories where the source .flac files are stored
+FLAC_INPUT_DIR = "/Volumes/gen_audio_catalog/volumes/kinh/datasets/AudioSet/full/audio/unbal_train/"
+FLAC_INPUT_DIR_BACKUP = "/Volumes/gen_audio_catalog/volumes/kinh/datasets/AudioSet/full/audio/bal_train/"  # fallback if not found in primary
 
 # Root folder for processed .wav files (train/ and val/ sub-folders are created automatically)
 WAV_OUTPUT_DIR = "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_AudioSet/processed_wav/"
@@ -133,6 +134,20 @@ def read_flac_file(flac_path: str) -> bytes:
         return f.read()
 
 
+def resolve_flac_path(file_id: str):
+    """Return the path to the .flac file for *file_id*, checking the primary
+    directory first, then the backup.  Returns ``None`` if the file is not
+    found in either location.
+    """
+    primary = os.path.join(FLAC_INPUT_DIR, f"{file_id}.flac")
+    if os.path.exists(primary):
+        return primary
+    backup = os.path.join(FLAC_INPUT_DIR_BACKUP, f"{file_id}.flac")
+    if os.path.exists(backup):
+        return backup
+    return None
+
+
 def convert_to_mono_wav(audio_bytes: bytes, target_sr: int) -> tuple:
     """Convert raw audio bytes (any format supported by soundfile) to mono at *target_sr*.
 
@@ -207,10 +222,10 @@ def _process_entries(entries, wav_dir, json_path, label=""):
     skipped_count = 0
 
     for file_id, caption in tqdm(entries, desc=label, unit="file"):
-        flac_path = os.path.join(FLAC_INPUT_DIR, f"{file_id}.flac")
+        flac_path = resolve_flac_path(file_id)
 
-        if not os.path.exists(flac_path):
-            logger.warning("[%s] FLAC file not found, skipping: %s", label, flac_path)
+        if flac_path is None:
+            logger.warning("[%s] FLAC file not found in any directory, skipping: %s", label, file_id)
             skipped_count += 1
             continue
 
@@ -347,10 +362,10 @@ def debug(max_files: int = 10):
             break
 
     for file_id, caption in tqdm(entries, desc="DEBUG", unit="file"):
-        flac_path = os.path.join(FLAC_INPUT_DIR, f"{file_id}.flac")
+        flac_path = resolve_flac_path(file_id)
 
-        if not os.path.exists(flac_path):
-            logger.warning("[DEBUG] FLAC file not found, skipping: %s", flac_path)
+        if flac_path is None:
+            logger.warning("[DEBUG] FLAC file not found in any directory, skipping: %s", file_id)
             error_count += 1
             continue
 
