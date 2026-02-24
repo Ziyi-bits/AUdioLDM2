@@ -197,6 +197,65 @@ def main():
     )
 
 
+def debug(max_files: int = 10):
+    """Run a quick sanity check using only *max_files* entries from val.csv."""
+    logger.info("Starting DEBUG run (max %d files from val.csv)...", max_files)
+
+    os.makedirs(WAV_OUTPUT_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(JSON_OUTPUT_PATH), exist_ok=True)
+
+    json_entries = []
+    processed_count = 0
+    error_count = 0
+
+    for file_id, caption in read_csv_metadata("./val.csv"):
+        if processed_count + error_count >= max_files:
+            break
+
+        flac_path = os.path.join(FLAC_INPUT_DIR, f"{file_id}.flac")
+        wav_filename = f"{file_id}.wav"
+        wav_output_path = os.path.join(WAV_OUTPUT_DIR, wav_filename)
+
+        try:
+            logger.info("[DEBUG %d/%d] Reading %s ...", processed_count + error_count + 1, max_files, flac_path)
+            audio_bytes = read_flac_file(flac_path)
+
+            audio_data, sr = convert_to_mono_wav(audio_bytes, TARGET_SAMPLE_RATE)
+
+            save_wav(audio_data, sr, wav_output_path)
+            logger.info("[DEBUG] Saved: %s", wav_output_path)
+
+            json_entries.append(build_json_entry(wav_output_path, caption))
+            processed_count += 1
+
+        except Exception:
+            logger.exception("[DEBUG] Failed to process file_id=%s", file_id)
+            error_count += 1
+            continue
+
+    # Write a debug JSON file
+    debug_json_path = JSON_OUTPUT_PATH.replace(".json", "_debug.json")
+    output_json = {"data": json_entries}
+    with open(debug_json_path, "w", encoding="utf-8") as jf:
+        json.dump(output_json, jf, indent=4, ensure_ascii=False)
+
+    logger.info(
+        "DEBUG done. Processed: %d | Errors: %d | JSON saved to: %s",
+        processed_count,
+        error_count,
+        debug_json_path,
+    )
+
+
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Prepare audio data for AudioLDM training.")
+    parser.add_argument("--debug", action="store_true", help="Run a quick debug pass on 10 files from val.csv")
+    args = parser.parse_args()
+
+    if args.debug:
+        debug()
+    else:
+        main()
 
