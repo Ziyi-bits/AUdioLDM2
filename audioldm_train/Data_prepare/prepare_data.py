@@ -383,28 +383,17 @@ def debug(max_files: int = 10):
         error_count,
         debug_json_path,
     )
+# ---------------------------------------------------------------------------
+# Run configuration — set these before running in a Databricks notebook cell
+# ---------------------------------------------------------------------------
+RUN_MODE = "debug"          # "debug" | "full"
+MERGE_VAL_PORTION = 0.97    # 0.0 = no merging, 0.5 = move 50% of val to train, etc.
+SEED = 42
+
 # COMMAND ----------
 
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Prepare audio data for AudioLDM training.")
-    parser.add_argument("--debug", action="store_true",default=True, help="Run a quick debug pass on 10 files from val.csv")
-    parser.add_argument(
-        "--merge-val",
-        type=float,
-        default=0.97,
-        metavar="PORTION",
-        help="Move PORTION (0.0–1.0) of val.csv entries into the training set. "
-             "The moved files are saved as .wav in the train/ folder and added to "
-             "the training JSON; they are excluded from the val set. "
-             "0.0 (default) means no merging. E.g. --merge-val 0.5 moves 50%%.",
-    )
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for --merge-val (default: 42)")
-    args = parser.parse_args()
-
-    if args.debug:
-        debug()
-    else:
-        main(merge_val_portion=args.merge_val, seed=args.seed)
+if RUN_MODE == "debug":
+    debug()
+else:
+    main(merge_val_portion=MERGE_VAL_PORTION, seed=SEED)
 
