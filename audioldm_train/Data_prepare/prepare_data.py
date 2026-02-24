@@ -1,3 +1,4 @@
+# Databricks notebook source
 """
 Data preparation script for AudioLDM training/finetuning.
 
@@ -12,7 +13,7 @@ This script is designed to run on Databricks. It:
 Usage (Databricks notebook or job):
     Adjust the configuration variables below, then run the script.
 """
-
+# COMMAND ----------
 import csv
 import json
 import os
@@ -50,7 +51,7 @@ VAL_JSON_PATH = os.path.join(JSON_OUTPUT_DIR, "audiocaps_val.json")
 # Target audio parameters
 TARGET_SAMPLE_RATE = 48000
 TARGET_CHANNELS = 1  # mono
-
+# COMMAND ----------
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -179,7 +180,7 @@ def build_json_entry(wav_path: str, caption: str) -> dict:
         "caption": caption,
     }
 
-
+# COMMAND ----------
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -321,7 +322,7 @@ def main(merge_val_portion: float = 0.0, seed: int = 42):
         train_proc, len(val_to_train), val_proc,
     )
 
-
+# COMMAND ----------
 def debug(max_files: int = 10):
     """Run a quick sanity check using only *max_files* entries from val.csv."""
     logger.info("Starting DEBUG run (max %d files from val.csv)...", max_files)
@@ -376,7 +377,7 @@ def debug(max_files: int = 10):
         error_count,
         debug_json_path,
     )
-
+# COMMAND ----------
 
 if __name__ == "__main__":
     import argparse
