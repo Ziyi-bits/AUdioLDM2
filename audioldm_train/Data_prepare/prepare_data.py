@@ -29,11 +29,17 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # Configuration – adjust these to match your environment
 # ---------------------------------------------------------------------------
-# change the base directory to the current working directory of the SCRIPT TO ENSURE THE CSV FILES ARE FOUND
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# Resolve the directory containing the CSV files.
+# In Databricks notebooks __file__ is not defined, so we fall back to the
+# current working directory (which you can set in a preceding notebook cell).
+try:
+    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    _SCRIPT_DIR = os.getcwd()
 
-# Path to the input CSV file (on DBFS or mounted volume)
-CSV_FILE_PATH = ["./train.csv", "./val.csv"]
+# Path to the input CSV files
+TRAIN_CSV_PATH = os.path.join(_SCRIPT_DIR, "train.csv")
+VAL_CSV_PATH = os.path.join(_SCRIPT_DIR, "val.csv")
 
 # Mounted-volume directory where the source .flac files are stored
 FLAC_INPUT_DIR = "/Volumes/gen_audio_catalog/volumes/kinh/datasets/AudioSet/full/audio/unbal_train/"  # e.g. <FLAC_INPUT_DIR>/<file_id>.flac
@@ -260,8 +266,8 @@ def main(merge_val_portion: float = 0.0, seed: int = 42):
     logger.info("Starting data preparation...")
 
     # ── Read CSV metadata ──────────────────────────────────────────────
-    train_entries = list(read_csv_metadata("./train.csv"))
-    val_entries = list(read_csv_metadata("./val.csv"))
+    train_entries = list(read_csv_metadata(TRAIN_CSV_PATH))
+    val_entries = list(read_csv_metadata(VAL_CSV_PATH))
     logger.info("CSV entries — train: %d | val: %d", len(train_entries), len(val_entries))
 
     # ── Split val entries into "merge-to-train" and "keep-as-val" ──────
@@ -335,7 +341,7 @@ def debug(max_files: int = 10):
     error_count = 0
 
     entries = []
-    for file_id, caption in read_csv_metadata("./val.csv"):
+    for file_id, caption in read_csv_metadata(VAL_CSV_PATH):
         entries.append((file_id, caption))
         if len(entries) >= max_files:
             break
