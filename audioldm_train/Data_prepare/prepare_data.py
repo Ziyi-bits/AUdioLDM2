@@ -75,7 +75,7 @@ logger = logging.getLogger(__name__)
 def read_csv_metadata(csv_path: str):
     """Read the CSV and yield (file_id, caption) for each valid row.
 
-    - Uses the first column as the file ID (audio file name).
+    - Uses the second column (youtube_id) as the file ID (audio file name).
     - Skips rows where the file ID starts with '='.
     - Uses the fourth column as the caption.
     """
@@ -90,7 +90,7 @@ def read_csv_metadata(csv_path: str):
                 logger.warning("Row %d: fewer than 4 columns, skipping: %s", row_num, row)
                 continue
 
-            file_id = row[0].strip()
+            file_id = row[1].strip()
 
             # Skip rows where the file ID starts with '='
             if file_id.startswith("="):
