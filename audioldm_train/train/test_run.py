@@ -1,8 +1,15 @@
+# Databricks notebook source
+# COMMAND ----------
+# %pip install -r /Workspace/Users/ziyi.xu@harman.com/AUdioLDM2/audioldm_train/modules/audiomae/sequence_gen/requirements.txt
+#
+# dbutils.library.restartPython()
+# COMMAND ----------
 import subprocess
 import sys
 import os
 import argparse
 
+# COMMAND ----------
 def run_diffusion(dry_run: bool) -> None:
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -53,7 +60,7 @@ def run_diffusion(dry_run: bool) -> None:
     process.wait()
     print(f"Process finished with exit code {process.returncode}")
 
-
+# COMMAND ----------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Only validate paths without starting training.")
