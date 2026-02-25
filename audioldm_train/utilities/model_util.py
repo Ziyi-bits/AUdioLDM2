@@ -264,7 +264,7 @@ def torch_version_orig_mod_remove(state_dict):
 
 
 def get_vocoder(config, device, mel_bins):
-    ROOT = "data/checkpoints"
+    ROOT = "/Volumes/gen_audio_catalog/volumes/ziyi/Checkpoint_AudioLDM2/"
 
     if mel_bins == 64:
         model_path = os.path.join(ROOT, "hifigan_16k_64bins")
