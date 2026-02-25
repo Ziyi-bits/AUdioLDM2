@@ -152,6 +152,6 @@ model:
 #          amodel: HTSAT-tiny
 
     evaluation_params:
-      unconditional_guidance_scale: 1.0
+      unconditional_guidance_scale: 3.5
       ddim_sampling_steps: 200
       n_candidates_per_samples: 3
