@@ -1,5 +1,5 @@
 metadata_root: "./data/dataset/metadata/dataset_root.json"
-log_directory: "./log/latent_diffusion"
+log_directory: "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_training/
 project: "audioldm"
 precision: "high"
 
