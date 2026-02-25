@@ -61,9 +61,21 @@ def run_diffusion(dry_run: bool) -> None:
     print(f"Process finished with exit code {process.returncode}")
 
 # COMMAND ----------
-if __name__ == "__main__":
+def _is_databricks() -> bool:
+    """Detect if running inside a Databricks notebook."""
+    return (
+        "DATABRICKS_RUNTIME_VERSION" in os.environ
+        or "db_ipykernel_launcher" in sys.argv[0]
+        or any("/databricks/" in arg or "\\databricks\\" in arg for arg in sys.argv)
+        or "ipykernel_launcher" in sys.argv[0]
+    )
+
+if _is_databricks():
+    # In Databricks notebooks argparse will choke on the kernel arguments,
+    # so we skip argument parsing and use sensible defaults.
+    run_diffusion(dry_run=False)
+elif __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Only validate paths without starting training.")
-    args = parser.parse_args()
-
+    args, _ = parser.parse_known_args()
     run_diffusion(dry_run=args.dry_run)
