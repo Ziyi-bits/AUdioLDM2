@@ -4,7 +4,11 @@ import os
 import argparse
 
 def run_diffusion(dry_run: bool) -> None:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        # __file__ is not defined in some environments (e.g. Databricks notebooks)
+        script_dir = os.getcwd()
     repo_root = os.path.dirname(os.path.dirname(script_dir))
     os.chdir(repo_root)
 
