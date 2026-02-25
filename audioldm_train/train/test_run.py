@@ -30,9 +30,17 @@ def run_diffusion(dry_run: bool) -> None:
     )
 
     # Command arguments (equivalent to the terminal command in the request)
+    # Use a wrapper snippet so that repo_root is always on sys.path, even when
+    # PYTHONPATH is ignored or overridden by a virtualenv (common on Databricks).
+    wrapper = (
+        f"import sys; sys.path.insert(0, {repo_root!r}); "
+        f"exec(open({main_script!r}).read())"
+    )
     cmd = [
         sys.executable,  # Python interpreter
-        main_script,
+        "-c",
+        wrapper,
+        # The original script reads its own sys.argv for -c <config>:
         "-c",
         config_path,
     ]
@@ -48,11 +56,16 @@ def run_diffusion(dry_run: bool) -> None:
         return
 
     # Optional: set environment variables for verbose logging
-    os.environ["AUDIO_LDM_DEBUG"] = "1"  # You can check this flag inside your code for extra logs
+    env = os.environ.copy()
+    env["AUDIO_LDM_DEBUG"] = "1"  # You can check this flag inside your code for extra logs
+
+    # Also set PYTHONPATH as a belt-and-suspenders measure
+    existing_pypath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = repo_root + (os.pathsep + existing_pypath if existing_pypath else "")
 
     # Run the process and stream output
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                               encoding="utf-8", errors="replace")
+                               encoding="utf-8", errors="replace", env=env)
 
     for line in process.stdout:
         print(line.strip())
