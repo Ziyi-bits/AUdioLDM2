@@ -181,7 +181,7 @@ def _load_models(
         FlanT5HiddenState,
     )
 
-    clap_ckpt = r"/Volumes/gen_audio_catalog/volumes/ziyi/Checkpoint_AudioLDM2/clap_htsat_tiny.pt".replace("\\", "/")
+    clap_ckpt = Path(r"/Volumes/gen_audio_catalog/volumes/ziyi/Checkpoint_AudioLDM2/clap_htsat_tiny.pt".replace("\\", "/"))
     if not Path(checkpoint_path).is_file():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     if not clap_ckpt.is_file():
