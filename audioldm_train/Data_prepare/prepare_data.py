@@ -312,19 +312,20 @@ def main(merge_val_portion: float = 0.0, seed: int = 42):
     # ── Step 2: Merge selected val entries into training ───────────────
     if val_to_train:
         logger.info("=== Step 2/3: Merging selected VAL entries into TRAINING ===")
+        tmp_merge_json = os.path.join(tempfile.gettempdir(), "_tmp_merge_.json")
         merge_proc, merge_err = _process_entries(
-            val_to_train, TRAIN_WAV_DIR, "_tmp_merge_.json", label="VAL→TRAIN",
+            val_to_train, TRAIN_WAV_DIR, tmp_merge_json, label="VAL→TRAIN",
         )
         # Append the newly processed entries into the existing training JSON
         with open(TRAIN_JSON_PATH, "r", encoding="utf-8") as f:
             train_data = json.load(f)
-        with open("_tmp_merge_.json", "r", encoding="utf-8") as f:
+        with open(tmp_merge_json, "r", encoding="utf-8") as f:
             merge_data = json.load(f)
         train_data["data"].extend(merge_data["data"])
         safe_write_text(TRAIN_JSON_PATH, json.dumps(train_data, indent=4, ensure_ascii=False))
         # clean up temp file
-        if os.path.exists("_tmp_merge_.json"):
-            os.remove("_tmp_merge_.json")
+        if os.path.exists(tmp_merge_json):
+            os.remove(tmp_merge_json)
         logger.info(
             "Training JSON updated — total entries: %d (original: %d + merged: %d)",
             len(train_data["data"]), train_proc, merge_proc,
