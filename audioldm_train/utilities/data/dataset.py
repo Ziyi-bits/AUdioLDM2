@@ -234,12 +234,12 @@ class AudioDataset(Dataset):
         root_path = self.get_dataset_root_path(dataset_name)
         for i in range(len(metadata["data"])):
             assert "wav" in metadata["data"][i].keys(), metadata["data"][i]
-            assert metadata["data"][i]["wav"][0] != "/", (
-                "The dataset metadata should only contain relative path to the audio file: "
-                + str(metadata["data"][i]["wav"])
-            )
+            wav_path = metadata["data"][i]["wav"]
+            if os.path.isabs(wav_path):
+                # Already an absolute path (e.g. Databricks Volumes); keep as-is
+                continue
             metadata["data"][i]["wav"] = os.path.join(
-                root_path, metadata["data"][i]["wav"]
+                root_path, wav_path
             )
         return metadata
 
