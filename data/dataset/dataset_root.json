@@ -1,0 +1,16 @@
+{
+    "audiocaps": "./data/dataset/audioset",
+    "comments":{
+    },
+
+    "metadata":{
+        "path": {
+            "audiocaps":{
+                "train": "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_AudioSet/metadata/audiocaps_val.json",
+                "test": "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_AudioSet/metadata/audiocaps_val.json",
+                "val": "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_AudioSet/metadata/audiocaps_val.json",
+                "class_label_indices": "C:/Users/ZiXu/Documents/Python_Scripts/Git/AudioDLM2/AudioLDM-training-finetuning/data/dataset/metadata/audiocaps/class_labels_indices.csv"
+            }
+        }
+    }
+}
