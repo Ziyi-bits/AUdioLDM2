@@ -18,10 +18,7 @@ if TYPE_CHECKING:
     from audioldm_train.conditional_models import CLAPAudioEmbeddingClassifierFreev2, FlanT5HiddenState
 
 
-_DEFAULT_GPT2_CKPT = (
-    "C:/Users/ZiXu/Documents/Python_Scripts/AudioLDM_GPT2_Checkpoint/checkpoints/"
-    "clapT52gpt2/20260202_140247/GPT2_epoch=10_val_loss=0.0291.ckpt"
-)
+_DEFAULT_GPT2_CKPT = r"/Volumes/gen_audio_catalog/volumes/ziyi/GPT2_training_clapT5_noEarlyStop_MSE/checkpoints/clapT52gpt2/20260202_140247/GPT2_epoch=10_val_loss=0.0291.ckpt".replace("\\", "/")
 
 
 class CLAPT5ToGPT2(nn.Module):
@@ -184,7 +181,7 @@ def _load_models(
         FlanT5HiddenState,
     )
 
-    clap_ckpt = _resolve_clap_checkpoint(clap_checkpoint_path)
+    clap_ckpt = r"/Volumes/gen_audio_catalog/volumes/ziyi/Checkpoint_AudioLDM2/clap_htsat_tiny.pt".replace("\\", "/")
     if not Path(checkpoint_path).is_file():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     if not clap_ckpt.is_file():
