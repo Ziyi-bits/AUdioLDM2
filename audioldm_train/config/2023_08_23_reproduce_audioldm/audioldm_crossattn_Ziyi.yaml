@@ -1,5 +1,5 @@
 metadata_root: "/Workspace/Users/ziyi.xu@harman.com/AUdioLDM2/data/dataset/dataset_root.json"
-log_directory: "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_training/
+log_directory: "/Volumes/gen_audio_catalog/volumes/ziyi/Diffusion_training/"
 project: "audioldm"
 precision: "high"
 
