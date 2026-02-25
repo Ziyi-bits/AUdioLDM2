@@ -14,7 +14,10 @@ from audioldm_train.modules.diffusionmodules.distributions import (
     DiagonalGaussianDistribution,
 )
 
-import wandb
+try:
+    import wandb
+except ImportError:
+    wandb = None
 from audioldm_train.utilities.model_util import instantiate_from_config
 import soundfile as sf
 
@@ -558,7 +561,7 @@ class AutoencoderKL(pl.LightningModule):
             )
             wav_original = waveform[index, 0].cpu().detach().numpy()
 
-        if self.logger is not None:
+        if self.logger is not None and wandb is not None:
             self.logger.experiment.log(
                 {
                     "original_%s"
