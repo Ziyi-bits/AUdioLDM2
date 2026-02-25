@@ -432,8 +432,9 @@ def extract_kaldi_fbank_feature_32k(config, dl_output, metadata):
 def extract_drum_beat(config, dl_output, metadata):
     def visualization(conditional_signal, mel_spectrogram, filename):
         import soundfile as sf
+        from audioldm_train.utilities.tools import safe_write_wav
 
-        sf.write(
+        safe_write_wav(
             os.path.basename(dl_output["fname"]),
             np.array(dl_output["waveform"])[0],
             dl_output["sampling_rate"],

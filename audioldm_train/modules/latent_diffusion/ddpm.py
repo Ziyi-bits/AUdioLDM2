@@ -42,6 +42,7 @@ from audioldm_train.modules.diffusionmodules.distributions import (
 from audioldm_train.modules.latent_diffusion.ddim import DDIMSampler
 from audioldm_train.modules.latent_diffusion.plms import PLMSSampler
 from audioldm_train.modules.audiomae.sequence_gen import generate_gpt2_condition
+from audioldm_train.utilities.tools import safe_write_wav
 import soundfile as sf
 import os
 
@@ -1803,7 +1804,7 @@ class LatentDiffusion(DDPM):
             todo_waveform = (
                 todo_waveform / np.max(np.abs(todo_waveform))
             ) * 0.8  # Normalize the energy of the generation output
-            sf.write(path, todo_waveform, samplerate=self.sampling_rate)
+            safe_write_wav(path, todo_waveform, self.sampling_rate)
 
     @torch.no_grad()
     def sample_log(

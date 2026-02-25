@@ -2,13 +2,17 @@
 # Email: haoheliu@gmail.com
 # Date: 11 Feb 2023
 
+import io
 import os
 import json
+import shutil
+import tempfile
 
 import torch
 import torch.nn.functional as F
 import numpy as np
 import matplotlib
+import soundfile as sf
 from scipy.io import wavfile
 from matplotlib import pyplot as plt
 
@@ -564,3 +568,33 @@ def pad(input_ele, mel_max_length=None):
         out_list.append(one_batch_padded)
     out_padded = torch.stack(out_list)
     return out_padded
+
+
+def safe_write_bytes(dest_path: str, data: bytes):
+    """Write *data* to *dest_path* via a local temp file, then copy.
+
+    Mounted S3 / FUSE volumes may not support all write modes reliably.
+    Writing to a local temp file first and then copying avoids partial-write
+    or permission issues on such mounts.
+    """
+    os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        suffix=os.path.splitext(dest_path)[1],
+        dir=tempfile.gettempdir(),
+    )
+    try:
+        with os.fdopen(fd, "wb") as tmp_f:
+            tmp_f.write(data)
+        shutil.copy2(tmp_path, dest_path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def safe_write_wav(path: str, audio_data, sample_rate: int):
+    """Write a WAV file via BytesIO + safe_write_bytes (S3/FUSE-safe)."""
+    buf = io.BytesIO()
+    sf.write(buf, audio_data, sample_rate, format="WAV", endian="LITTLE", subtype="PCM_16")
+    safe_write_bytes(path, buf.getvalue())
+    buf.close()
+

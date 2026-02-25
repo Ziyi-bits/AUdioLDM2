@@ -22,6 +22,7 @@ import soundfile as sf
 from omegaconf import OmegaConf
 from audioldm_train.utilities.model_util import instantiate_from_config
 from audioldm_train.modules.latent_diffusion.ddpm import LatentDiffusion
+from audioldm_train.utilities.tools import safe_write_wav
 import numpy as np
 from huggingface_hub import hf_hub_download
 
@@ -125,7 +126,7 @@ waveform = model.mel_spectrogram_to_waveform(mel, save=False)
 # Normalize and save
 wav = waveform[0, 0]
 wav = (wav / (abs(wav).max() + 1e-8)) * 0.99
-sf.write(save_path, wav, samplerate=model.sampling_rate)
+safe_write_wav(save_path, wav, model.sampling_rate)
 print(f"Audio saved to: {save_path}")
 
 

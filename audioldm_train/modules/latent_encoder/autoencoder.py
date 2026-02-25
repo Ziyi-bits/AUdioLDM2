@@ -19,7 +19,7 @@ from audioldm_train.utilities.model_util import instantiate_from_config
 import soundfile as sf
 
 from audioldm_train.utilities.model_util import get_vocoder
-from audioldm_train.utilities.tools import synth_one_sample
+from audioldm_train.utilities.tools import synth_one_sample, safe_write_wav
 import itertools
 
 
@@ -466,7 +466,7 @@ class AutoencoderKL(pl.LightningModule):
         for wav, name in zip(batch_wav, fname):
             name = os.path.basename(name)
 
-            sf.write(os.path.join(save_dir, name), wav, samplerate=self.sampling_rate)
+            safe_write_wav(os.path.join(save_dir, name), wav, self.sampling_rate)
 
     def configure_optimizers(self):
         lr = self.learning_rate
