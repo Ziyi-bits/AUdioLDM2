@@ -1180,9 +1180,14 @@ class LatentDiffusion(DDPM):
 
         # Classifier-free guidance
         if not unconditional_cfg:
-            c = self.cond_stage_models[
+            model = self.cond_stage_models[
                 self.cond_stage_model_metadata[key]["model_idx"]
-            ](c)
+            ]
+            if isinstance(model, nn.Identity):
+                # Should not reach here for GPT-2 (handled in get_input),
+                # but guard against it just in case.
+                return c
+            c = model(c)
         else:
             # when the cond_stage_key is "all", pick one random element out
             if isinstance(c, dict):
@@ -1195,9 +1200,19 @@ class LatentDiffusion(DDPM):
             else:
                 raise NotImplementedError()
 
-            c = self.cond_stage_models[
+            model = self.cond_stage_models[
                 self.cond_stage_model_metadata[key]["model_idx"]
-            ].get_unconditional_condition(batchsize)
+            ]
+            if isinstance(model, nn.Identity):
+                # GPT-2 placeholder: return zeros matching expected shape
+                num_tokens = 8
+                embed_dim = 768
+                device = c.device if isinstance(c, torch.Tensor) else self.device
+                uc_hidden = torch.zeros(batchsize, num_tokens, embed_dim, device=device)
+                uc_mask = torch.ones(batchsize, num_tokens, device=device, dtype=torch.float32)
+                c = [uc_hidden, uc_mask]
+            else:
+                c = model.get_unconditional_condition(batchsize)
 
         return c
 
@@ -1941,9 +1956,27 @@ class LatentDiffusion(DDPM):
                     unconditional_conditioning = {}
                     for key in self.cond_stage_model_metadata:
                         model_idx = self.cond_stage_model_metadata[key]["model_idx"]
-                        unconditional_conditioning[key] = self.cond_stage_models[
-                            model_idx
-                        ].get_unconditional_condition(batch_size)
+                        model = self.cond_stage_models[model_idx]
+                        if isinstance(model, nn.Identity):
+                            # The GPT-2 condition is a standalone function, not
+                            # an nn.Module, so its slot holds an Identity placeholder.
+                            # Produce a zeros unconditional condition that matches
+                            # the shape returned by generate_gpt2_condition:
+                            #   [batch, num_tokens, 768]  and  [batch, num_tokens]
+                            num_tokens = 8
+                            embed_dim = 768
+                            uc_hidden = torch.zeros(
+                                batch_size, num_tokens, embed_dim,
+                                device=self.device,
+                            )
+                            uc_mask = torch.ones(
+                                batch_size, num_tokens,
+                                device=self.device,
+                                dtype=torch.float32,
+                            )
+                            unconditional_conditioning[key] = [uc_hidden, uc_mask]
+                        else:
+                            unconditional_conditioning[key] = model.get_unconditional_condition(batch_size)
 
                 fnames = list(super().get_input(batch, "fname"))
 
