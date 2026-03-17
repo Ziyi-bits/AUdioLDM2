@@ -123,7 +123,7 @@ class DDPM(pl.LightningModule):
             amodel="HTSAT-tiny",
             unconditional_prob=0.0,
             training_mode=False,
-        ).to(self.device)
+        ).to(self.device).eval()
 
         if self.global_rank == 0:
             self.evaluator = evaluator
