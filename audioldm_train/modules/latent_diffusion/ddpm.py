@@ -1212,12 +1212,15 @@ class LatentDiffusion(DDPM):
                 self.cond_stage_model_metadata[key]["model_idx"]
             ]
             if isinstance(model, nn.Identity):
-                # GPT-2 placeholder: return zeros matching expected shape
-                num_tokens = 8
-                embed_dim = 768
                 device = c.device if isinstance(c, torch.Tensor) else self.device
-                uc_hidden = torch.zeros(batchsize, num_tokens, embed_dim, device=device)
-                uc_mask = torch.ones(batchsize, num_tokens, device=device, dtype=torch.float32)
+                if key == "crossattn_clap_cond":
+                    # CLAP text produces [batch, 1, 512]
+                    uc_hidden = torch.zeros(batchsize, 1, 512, device=device)
+                    uc_mask = torch.ones(batchsize, 1, device=device, dtype=torch.float32)
+                else:
+                    # GPT-2 placeholder: [batch, 8, 768]
+                    uc_hidden = torch.zeros(batchsize, 8, 768, device=device)
+                    uc_mask = torch.ones(batchsize, 8, device=device, dtype=torch.float32)
                 c = [uc_hidden, uc_mask]
             else:
                 c = model.get_unconditional_condition(batchsize)
@@ -1972,22 +1975,28 @@ class LatentDiffusion(DDPM):
                         model_idx = self.cond_stage_model_metadata[key]["model_idx"]
                         model = self.cond_stage_models[model_idx]
                         if isinstance(model, nn.Identity):
-                            # The GPT-2 condition is a standalone function, not
-                            # an nn.Module, so its slot holds an Identity placeholder.
-                            # Produce a zeros unconditional condition that matches
-                            # the shape returned by generate_gpt2_condition:
-                            #   [batch, num_tokens, 768]  and  [batch, num_tokens]
-                            num_tokens = 8
-                            embed_dim = 768
-                            uc_hidden = torch.zeros(
-                                batch_size, num_tokens, embed_dim,
-                                device=self.device,
-                            )
-                            uc_mask = torch.ones(
-                                batch_size, num_tokens,
-                                device=self.device,
-                                dtype=torch.float32,
-                            )
+                            if key == "crossattn_clap_cond":
+                                # CLAP text produces [batch, 1, 512]
+                                uc_hidden = torch.zeros(
+                                    batch_size, 1, 512,
+                                    device=self.device,
+                                )
+                                uc_mask = torch.ones(
+                                    batch_size, 1,
+                                    device=self.device,
+                                    dtype=torch.float32,
+                                )
+                            else:
+                                # GPT-2 placeholder: [batch, 8, 768]
+                                uc_hidden = torch.zeros(
+                                    batch_size, 8, 768,
+                                    device=self.device,
+                                )
+                                uc_mask = torch.ones(
+                                    batch_size, 8,
+                                    device=self.device,
+                                    dtype=torch.float32,
+                                )
                             unconditional_conditioning[key] = [uc_hidden, uc_mask]
                         else:
                             unconditional_conditioning[key] = model.get_unconditional_condition(batch_size)
