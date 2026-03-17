@@ -109,7 +109,7 @@ class DDPM(pl.LightningModule):
         self.log_every_t = log_every_t
         self.first_stage_key = first_stage_key
         self.sampling_rate = sampling_rate
-        self.clap = CLAPAudioEmbeddingClassifierFreev2(
+        self.clap_audio = CLAPAudioEmbeddingClassifierFreev2(
             pretrained_path="data/checkpoints/clap_music_speech_audioset_epoch_15_esc_89.98.pt",
             sampling_rate=self.sampling_rate,
             embed_mode="audio",
@@ -2009,7 +2009,7 @@ class LatentDiffusion(DDPM):
                 if n_gen > 1:
                     try:
                         best_index = []
-                        similarity = self.clap.cos_similarity(
+                        similarity = self.clap_audio.cos_similarity(
                             torch.FloatTensor(waveform).squeeze(1), text
                         )
                         for i in range(z.shape[0]):
