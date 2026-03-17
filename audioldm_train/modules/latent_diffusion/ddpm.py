@@ -122,7 +122,7 @@ class DDPM(pl.LightningModule):
             amodel="HTSAT-tiny",
             unconditional_prob=0.0,
             training_mode=False,
-        )
+        ).to(self.device).eval()
 
         if self.global_rank == 0:
             self.evaluator = evaluator
@@ -1161,7 +1161,7 @@ class LatentDiffusion(DDPM):
         for i, cond_model_key in enumerate(config.keys()):
             # GPT-2 condition is a standalone function, not an nn.Module;
             # it is called directly in get_input, so we skip instantiation.
-            if cond_model_key == "crossattn_gpt_2_cond":
+            if cond_model_key == "crossattn_gpt_2_cond" or cond_model_key == "crossattn_clap_cond":
                 model = nn.Identity()  # placeholder so indices stay aligned
             else:
                 model = instantiate_from_config(config[cond_model_key])
@@ -1281,15 +1281,21 @@ class LatentDiffusion(DDPM):
 
                 # if cond_stage_key is "all", xc will be a dictionary containing all keys
                 # Otherwise xc will be an entry of the dictionary
-                if cond_model_key != "crossattn_gpt_2_cond":
+                if cond_model_key != "crossattn_gpt_2_cond" and cond_model_key != "crossattn_clap_cond":
                     c = self.get_learned_conditioning(
                         xc, key=cond_model_key, unconditional_cfg=unconditional_cfg
                     )
-                else:
-
+                
+                elif cond_model_key == "crossattn_gpt_2_cond":
                     c = generate_gpt2_condition(
                         texts=xc,  # xc should be a list of strings
                         device=self.device)
+                
+                elif cond_model_key == "crossattn_clap_cond":
+                    c_1 = self.clap_text(xc)
+                    c_2 = torch.ones((c_1.size(0), c_1.size(1)), device=self.device, dtype=torch.float32)
+                    # return a list -> List[torch.Tensor]:
+                    c = [c_1, c_2]
 
                 # cond_dict will be used to condition the diffusion model
                 # If one conditional model return multiple conditioning signal
