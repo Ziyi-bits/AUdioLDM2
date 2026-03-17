@@ -110,10 +110,18 @@ class DDPM(pl.LightningModule):
         self.first_stage_key = first_stage_key
         self.sampling_rate = sampling_rate
         self.clap = CLAPAudioEmbeddingClassifierFreev2(
-            pretrained_path= r"/Volumes/gen_audio_catalog/volumes/ziyi/Checkpoint_AudioLDM2/clap_htsat_tiny.pt".replace("\\", "/"), # "data/checkpoints/clap_music_speech_audioset_epoch_15_esc_89.98.pt"
+            pretrained_path="data/checkpoints/clap_music_speech_audioset_epoch_15_esc_89.98.pt",
             sampling_rate=self.sampling_rate,
             embed_mode="audio",
+            amodel="HTSAT-base",
+        )
+
+        self.clap_text = CLAPAudioEmbeddingClassifierFreev2(
+            pretrained_path=r"/Volumes/gen_audio_catalog/volumes/ziyi/Checkpoint_AudioLDM2/clap_htsat_tiny.pt".replace("\\", "/"), # "data/checkpoints/clap_music_speech_audioset_epoch_15_esc_89.98.pt"
+            embed_mode="text",
             amodel="HTSAT-tiny",
+            unconditional_prob=0.0,
+            training_mode=False,
         )
 
         if self.global_rank == 0:
