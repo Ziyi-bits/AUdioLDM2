@@ -1,0 +1,16 @@
+{
+    "audiocaps": "./data/dataset/audioset",
+    "comments":{
+    },
+
+    "metadata":{
+        "path": {
+            "audiocaps":{
+                "train": "./data/dataset/metadata/audiocaps/datafiles/audiocaps_test_nonrepeat_subset_0.json", 
+                "test": "./data/dataset/metadata/audiocaps/testset_subset/audiocaps_test_nonrepeat_subset_0.json",
+                "val": "./data/dataset/metadata/audiocaps/testset_subset/audiocaps_test_nonrepeat_subset_0.json",
+                "class_label_indices": "./data/dataset/metadata/audiocaps/class_labels_indices.csv"
+            }
+        }
+    }
+}
